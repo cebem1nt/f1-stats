@@ -1,5 +1,11 @@
-def to_str(item: any):
-    return str(item) if item else "None"
+def to_str(item: any, empty_nones=False):
+    if item is None:
+        if empty_nones:
+            return " "
+        else:
+            return "None"
+
+    return str(item)
 
 def adjust(
     item: str, 
@@ -34,13 +40,14 @@ def print_headers(
 def print_rows(
     rows: list[any],
     widths: list[int],
-    adjustment: str
+    adjustment: str,
+    hide_nones: bool
 ):
     line = ""
 
     for row in rows:
         for i in range(len(row)):
-            element = to_str(row[i])
+            element = to_str(row[i], hide_nones)
             line += f"| {adjust(element, widths[i], adjustment)} "
 
         print(line + '|')
@@ -49,7 +56,8 @@ def print_rows(
 def print_table(
     rows: list[any],
     headers: list[str],
-    adjustment="left"
+    adjustment="left",
+    hide_nones=False
 ):
     if len(rows) and len(headers) != len(rows[0]):
         return
@@ -64,4 +72,4 @@ def print_table(
                 widths[j] = column_len
 
     print_headers(headers, widths, adjustment)
-    print_rows(rows, widths, adjustment)
+    print_rows(rows, widths, adjustment, hide_nones)

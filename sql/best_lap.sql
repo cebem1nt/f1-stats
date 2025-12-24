@@ -1,14 +1,14 @@
 SELECT
     race.year,
-    race_result.position_text AS position,
+    race_result.position_text,
     fastest_lap.driver_number,
     fastest_lap.driver_id,
     fastest_lap.constructor_id,
     fastest_lap.engine_manufacturer_id,
     fastest_lap.tyre_manufacturer_id,
-    fastest_lap.fastest_lap_lap AS lap,
-    fastest_lap.fastest_lap_time AS time,
-    fastest_lap.fastest_lap_time_millis AS time_ms
+    fastest_lap.fastest_lap_lap,
+    fastest_lap.fastest_lap_time,
+    fastest_lap.fastest_lap_time_millis
 FROM 
     race_data fastest_lap
 JOIN
