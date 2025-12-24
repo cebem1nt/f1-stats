@@ -24,14 +24,15 @@ def adjust(
 def print_headers(
     headers: list[str],
     widths: list[int],
-    adjustment: str
+    adjustment: str,
+    hide_nones: bool
 ):
     header_line = ""
     separator = ""
 
     for i, header in enumerate(headers):
         width = widths[i]
-        header_line += f"| {adjust(header, width, adjustment)} "
+        header_line += f"| {adjust(to_str(header, hide_nones), width, adjustment)} "
         separator   += f"|-{'-' * width}-"
     
     print(header_line + '|')
@@ -62,7 +63,7 @@ def print_table(
     if len(rows) and len(headers) != len(rows[0]):
         return
 
-    widths = [len(h) for h in headers]
+    widths = [len(to_str(h, hide_nones)) for h in headers]
 
     for row in rows:
         for j in range(len(headers)):
@@ -71,5 +72,5 @@ def print_table(
             if widths[j] < column_len:
                 widths[j] = column_len
 
-    print_headers(headers, widths, adjustment)
+    print_headers(headers, widths, adjustment, hide_nones)
     print_rows(rows, widths, adjustment, hide_nones)

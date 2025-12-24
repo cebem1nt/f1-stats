@@ -1,5 +1,5 @@
 SELECT 
-    race.circuit_id as circuit,
+    race.grand_prix_id,
     race.circuit_type,
     race_driver_standing.points as points,
     race_driver_standing.position_number as points_pos,
@@ -15,11 +15,11 @@ SELECT
 FROM 
     race_data
 JOIN 
-    race ON race.id = race_data.race_id
+    race on race.id = race_data.race_id
 LEFT JOIN
-    race_driver_standing ON race_driver_standing.race_id = race.id
-    AND race_driver_standing.driver_id = ?
+    race_driver_standing on race_driver_standing.race_id = race.id
+    and race_driver_standing.driver_id = ?
 WHERE 
-    race_data.driver_id = ?
-    AND race_data.type = 'RACE_RESULT'
-    AND race.year = ?
+    race_data.driver_id = ? and 
+    race_data.type = 'RACE_RESULT' and 
+    race.year = ?
