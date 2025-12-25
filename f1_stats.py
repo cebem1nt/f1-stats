@@ -2,6 +2,7 @@ import sqlite3, os
 from lib.tables import print_table
 from statistics import mean
 from argparse import ArgumentParser
+from collections import defaultdict
 
 conn = sqlite3.connect("data/f1db.db")
 cur = conn.cursor()
@@ -39,49 +40,35 @@ def season_table(year: int):
     , [year])
 
     grandprix_cols = []
-    grandprix_dict = {}
+    grandprix_template = {}
     out_rows = []
 
-    current_driver_name = None
-    current_driver_points = 0
-    current_driver_pos = 1
-
-    for grandprix in cur.fetchall():
-        grandprix_abbrev = grandprix[0]
-        grandprix_cols.append(grandprix_abbrev)
-        grandprix_dict[grandprix_abbrev] = None
-
+    for col in cur.fetchall():
+        abbr = col[0]
+        grandprix_cols.append(abbr)
+        grandprix_template[abbr] = None
 
     run_sql("season_table.sql", [year, year])
     rows = cur.fetchall()
-    total_rows = len(rows)
 
-    for i, row in enumerate(rows):
-        grandprix_abbrev = row[0]
-        driver_name = row[1]
-        finish_pos = row[2]
+    drivers_results = defaultdict(lambda: dict(grandprix_template))
+    drivers_points = {}
 
-        if (current_driver_name and current_driver_name != driver_name) or \
-            i+1 == total_rows:
-            
-            races_made = list(grandprix_dict.values())
-            out_rows.append([current_driver_pos, current_driver_name] + races_made + [current_driver_points])
-            
-            for k in grandprix_dict: 
-                grandprix_dict[k] = None
-            
-            current_driver_name = None
-            current_driver_pos += 1
+    for abbrev, name, finish_pos, points, is_pole, is_fastest in rows:
+        drivers_results[name][abbrev] = finish_pos
+        drivers_points[name] = points
 
-        current_driver_name = driver_name
-        current_driver_points = row[3]
+        if is_pole:
+            drivers_results[name][abbrev] += "\u1D56" # sup P
 
-        grandprix_dict[grandprix_abbrev] = finish_pos
+        if is_fastest:
+            drivers_results[name][abbrev] += "\u1DA0" # sup F
 
-        if row[4] == 1: # pole
-            grandprix_dict[grandprix_abbrev] += "\u1D56" # sup P
-        if row[5] == 1: # fastest lap
-            grandprix_dict[grandprix_abbrev] += "\u1DA0" # sup F
+    pos = 1
+    for name, points in drivers_points.items():
+        per_races = [drivers_results[name].get(abbr) for abbr in grandprix_cols]
+        out_rows.append([pos, name] + per_races + [points])
+        pos += 1
 
     print_table(
         out_rows,
