@@ -24,12 +24,9 @@ def driver_season(driver_id: str, year: int):
     print_table(rows, headers, hide_nones=True)
 
 def best_lap(circuit_id: str, rows=5, is_reversed=False):
-    headers = [
-        "year", "pos", "num", "driver id", "constructor", "engine manufactor", "tyre manufactor", "lap", "time", "ms"
-    ]
-
     run_sql("best_lap.sql", [circuit_id])
     fetched = cur.fetchall() if rows == -1 else cur.fetchmany(rows)
+    headers = [c[0] for c in cur.description]
 
     if is_reversed:
         print_table(fetched[::-1], headers)
@@ -78,7 +75,13 @@ def season_table(year: int):
 
         current_driver_name = driver_name
         current_driver_points = row[3]
+
         grandprix_dict[grandprix_abbrev] = finish_pos
+
+        if row[4] == 1: # pole
+            grandprix_dict[grandprix_abbrev] += "\u1D56" # sup P
+        if row[5] == 1: # fastest lap
+            grandprix_dict[grandprix_abbrev] += "\u1DA0" # sup F
 
     print_table(
         out_rows,

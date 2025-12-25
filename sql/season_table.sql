@@ -2,7 +2,9 @@ SELECT
     grand_prix.abbreviation,
     driver.name,
     race_data.position_text,
-    season_driver_standing.points
+    season_driver_standing.points,
+    race_data.race_pole_position,
+    race_data.race_fastest_lap
 FROM
     race
 JOIN
