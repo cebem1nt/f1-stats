@@ -25,18 +25,25 @@ def print_headers(
     headers: list[str],
     widths: list[int],
     adjustment: str,
-    hide_nones: bool
+    hide_nones=False,
+    is_reversed=False
 ):
     header_line = ""
-    separator = ""
+    med_separator = ""
 
     for i, header in enumerate(headers):
         width = widths[i]
         header_line += f"| {adjust(to_str(header, hide_nones), width, adjustment)} "
-        separator   += f"|-{'-' * width}-"
+        med_separator   += f"|-{'-' * width}-"
     
-    print(header_line + '|')
-    print(separator + '|')
+    if is_reversed:
+        print(med_separator + '|')
+        print(header_line + '|')
+        print()
+    else:
+        print()
+        print(header_line + '|')
+        print(med_separator + '|')
 
 def print_rows(
     rows: list[any],
@@ -58,7 +65,8 @@ def print_table(
     rows: list[any],
     headers: list[str],
     adjustment="left",
-    hide_nones=False
+    hide_nones=False,
+    double_headers=False
 ):
     if len(rows) and len(headers) != len(rows[0]):
         return
@@ -74,3 +82,6 @@ def print_table(
 
     print_headers(headers, widths, adjustment, hide_nones)
     print_rows(rows, widths, adjustment, hide_nones)
+    
+    if double_headers:
+        print_headers(headers, widths, adjustment, hide_nones, double_headers)

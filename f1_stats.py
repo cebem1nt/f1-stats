@@ -93,7 +93,8 @@ def championship(year: int, is_constructor=False):
     print_table(
         out_rows,
         ["pos", "name"] + grandprix_cols + ["pts"],
-        hide_nones=True
+        hide_nones=True,
+        double_headers=True
     )
 
 def main(args: any):
