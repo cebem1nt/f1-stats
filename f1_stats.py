@@ -4,20 +4,22 @@ from statistics import mean
 from argparse import ArgumentParser
 from collections import defaultdict
 
+from itertools import islice
+
 conn = sqlite3.connect("data/f1db.db")
 cur = conn.cursor()
 
 def ifnone(data: any, then: any):
     return data if data is not None else then
 
-def run_sql(name: str, params: list):
+def run_sql(name: str, params: list | dict):
     with open(os.path.join("sql", name)) as f:
         sql = f.read()
 
     cur.execute(sql, params)
 
 def driver_season(driver_id: str, year: int):
-    run_sql("driver_season.sql", [driver_id, driver_id, year])
+    run_sql("driver-season.sql", [driver_id, driver_id, year])
 
     rows = cur.fetchall()
     headers = [c[0] for c in cur.description]
@@ -25,7 +27,7 @@ def driver_season(driver_id: str, year: int):
     print_table(rows, headers, hide_nones=True)
 
 def best_lap(circuit_id: str, rows=5, is_reversed=False):
-    run_sql("best_lap.sql", [circuit_id])
+    run_sql("best-lap.sql", [circuit_id])
     fetched = cur.fetchall() if rows == -1 else cur.fetchmany(rows)
     headers = [c[0] for c in cur.description]
 
@@ -34,7 +36,7 @@ def best_lap(circuit_id: str, rows=5, is_reversed=False):
     else:
         print_table(fetched, headers)
 
-def season_table(year: int):
+def championship(year: int, is_constructor=False):
     cur.execute(
         "SELECT grand_prix.abbreviation FROM grand_prix JOIN race on race.year = ? WHERE race.grand_prix_id = grand_prix.id"
     , [year])
@@ -48,31 +50,49 @@ def season_table(year: int):
         grandprix_cols.append(abbr)
         grandprix_template[abbr] = None
 
-    run_sql("season_table.sql", [year, year])
+    run_sql("championship.sql", {"year": year})
     rows = cur.fetchall()
 
     drivers_results = defaultdict(lambda: dict(grandprix_template))
+    teams_drivers = defaultdict(dict)
     drivers_points = {}
+    teams_points = {}
 
-    for abbrev, name, finish_pos, points, is_pole, is_fastest in rows:
+    for abbrev, name, finish_pos, points, is_pole, is_fastest, team, team_points in rows:
         drivers_results[name][abbrev] = finish_pos
         drivers_points[name] = points
+        teams_points[team] = team_points
 
         if is_pole:
             drivers_results[name][abbrev] += "\u1D56" # sup P
 
         if is_fastest:
             drivers_results[name][abbrev] += "\u1DA0" # sup F
+        
+        teams_drivers[team][name] = drivers_results[name]
 
     pos = 1
-    for name, points in drivers_points.items():
-        per_races = [drivers_results[name].get(abbr) for abbr in grandprix_cols]
-        out_rows.append([pos, name] + per_races + [points])
-        pos += 1
+
+    if is_constructor:
+        sorted_teams_points = sorted(teams_points.items(), reverse=True, key=lambda kv: kv[1])
+        
+        for team, points in sorted_teams_points:
+            team_drivers = teams_drivers[team]
+
+            for name, results in islice(team_drivers.items(), 2):
+                per_races = [results[abbr] for abbr in grandprix_cols]
+                out_rows.append([pos, team] + per_races + [points])
+            
+            pos += 1
+    else:
+        for name, points in drivers_points.items():
+            per_races = [drivers_results[name].get(abbr) for abbr in grandprix_cols]
+            out_rows.append([pos, name] + per_races + [points])
+            pos += 1
 
     print_table(
         out_rows,
-        ["pos", "driver"] + grandprix_cols + ["pts"],
+        ["pos", "name"] + grandprix_cols + ["pts"],
         hide_nones=True
     )
 
@@ -81,8 +101,8 @@ def main(args: any):
         case "best-lap":
             best_lap(args.id, args.rows, args.reverse)
         
-        case "season-table":
-            season_table(args.year)
+        case "champ":
+            championship(args.year, args.constructor)
         
         case "driver-season":
             driver_season(args.id, args.year)
@@ -104,8 +124,9 @@ if __name__ == "__main__":
     driver_season_p.add_argument("id", metavar="ID", type=str, help="Driver id")
     driver_season_p.add_argument("year", metavar="YEAR", type=str, help="Season year")
 
-    season_table_p = subparsers.add_parser("season-table", help="Fancy wikipedia like season table")
-    season_table_p.add_argument("year", metavar="YEAR", type=str, help="Season year")
+    championship_p = subparsers.add_parser("champ", help="Fancy wikipedia like season table for driver/constructor championship")
+    championship_p.add_argument("-c", "--constructor", action="store_true", help="Show constructor standing instead of driver")
+    championship_p.add_argument("year", metavar="YEAR", type=str, help="Season year")
 
     args = p.parse_args()
 
