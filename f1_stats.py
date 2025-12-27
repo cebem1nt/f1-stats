@@ -6,6 +6,9 @@ from collections import defaultdict
 
 from itertools import islice
 
+SUP_F = "\u1DA0"
+SUP_P = "\u1D56"
+
 conn = sqlite3.connect("data/f1db.db")
 cur = conn.cursor()
 
@@ -13,21 +16,31 @@ def ifnone(data: any, then: any):
     return data if data is not None else then
 
 def run_sql(name: str, params: list | dict):
-    with open(os.path.join("sql", name)) as f:
+    with open(os.path.join("sql", name + ".sql")) as f:
         sql = f.read()
 
     cur.execute(sql, params)
 
 def driver_season(driver_id: str, year: int):
-    run_sql("driver-season.sql", [driver_id, driver_id, year])
+    run_sql("driver-season", { "id": driver_id, "year": year })
 
     rows = cur.fetchall()
-    headers = [c[0] for c in cur.description]
-    
-    print_table(rows, headers, hide_nones=True)
+    headers = [c[0] for c in cur.description[2:]]
+    out_rows = [] 
 
-def best_lap(circuit_id: str, rows=5, is_reversed=False):
-    run_sql("best-lap.sql", [circuit_id])
+    for is_fastest, is_pole, *row in rows:
+        if is_pole:
+           row[2] += SUP_P
+
+        if is_fastest:
+            row[2] += SUP_F
+        
+        out_rows.append(row)
+
+    print_table(out_rows, headers, hide_nones=True, double_headers=True)
+
+def best_lap(circuit_id: str, rows=15, is_reversed=False):
+    run_sql("best-lap", [circuit_id])
     fetched = cur.fetchall() if rows == -1 else cur.fetchmany(rows)
     headers = [c[0] for c in cur.description]
 
@@ -50,7 +63,7 @@ def championship(year: int, is_constructor=False):
         grandprix_cols.append(abbr)
         grandprix_template[abbr] = None
 
-    run_sql("championship.sql", {"year": year})
+    run_sql("championship", {"year": year})
     rows = cur.fetchall()
 
     drivers_results = defaultdict(lambda: dict(grandprix_template))
@@ -64,10 +77,10 @@ def championship(year: int, is_constructor=False):
         teams_points[team] = team_points
 
         if is_pole:
-            drivers_results[name][abbrev] += "\u1D56" # sup P
+            drivers_results[name][abbrev] += SUP_P
 
         if is_fastest:
-            drivers_results[name][abbrev] += "\u1DA0" # sup F
+            drivers_results[name][abbrev] += SUP_F
         
         teams_drivers[team][name] = drivers_results[name]
 
@@ -99,36 +112,42 @@ def championship(year: int, is_constructor=False):
 
 def main(args: any):
     match args.command:
-        case "best-lap":
-            best_lap(args.id, args.rows, args.reverse)
+        case "circuit":
+            if args.best_lap:
+                best_lap(args.id, is_reversed=args.reverse)
         
         case "champ":
             championship(args.year, args.constructor)
         
-        case "driver-season":
-            driver_season(args.id, args.year)
+        case "driver":
+            if args.season:
+                driver_season(args.id, args.year)
 
         case _:
             print(f"Unknown command: {args.command}")
 
 if __name__ == "__main__":
-    p = ArgumentParser(description="Diferrent charts, statistics about Formula One")
+    p = ArgumentParser(description="Diferrent charts, statistics, records, all time bests of Formula One")
 
-    subparsers = p.add_subparsers(dest="command", help="Available commands")
+    subps = p.add_subparsers(dest="command", help="Available commands")
 
-    best_lap_p = subparsers.add_parser("best-lap", help="Get best lap info for a circuit")
-    best_lap_p.add_argument("id", metavar="ID", type=str, help="Circuit id")
-    best_lap_p.add_argument("-r", "--rows", default=5, type=int, help="Amount of rows to fetch")
-    best_lap_p.add_argument("-R", "--reverse", action="store_true", help="Reverse results")
+    circuit_p = subps.add_parser("circuit", help="Get different records for a circuit")
+    circuit_p.add_argument      ("id", metavar="ID", type=str, help="Circuit id")
+    circuit_p.add_argument      ("-bl", "--best-lap", action="store_true", help="Get list of all time best laps")
+    circuit_p.add_argument      ("-R", "--reverse", action="store_true", help="Reverse results")
 
-    driver_season_p = subparsers.add_parser("driver-season", help="Driver season stats")
-    driver_season_p.add_argument("id", metavar="ID", type=str, help="Driver id")
-    driver_season_p.add_argument("year", metavar="YEAR", type=str, help="Season year")
-
-    championship_p = subparsers.add_parser("champ", help="Fancy wikipedia like season table for driver/constructor championship")
-    championship_p.add_argument("-c", "--constructor", action="store_true", help="Show constructor standing instead of driver")
-    championship_p.add_argument("year", metavar="YEAR", type=str, help="Season year")
+    driver_p = subps.add_parser("driver", help="Different driver's statistics, data over the season")
+    driver_p.add_argument      ("id", metavar="ID", type=str, help="Driver id")
+    driver_p.add_argument      ("year", metavar="YEAR", type=str, help="Season year")
+    driver_p.add_argument      ("-s", "--season", action="store_true", help="Get overall driver's statistics over season")
+    
+    champ_p = subps.add_parser("champ", help="Fancy wikipedia like season table for driver/constructor champ")
+    champ_p.add_argument      ("year", metavar="YEAR", type=str, help="Season year")
+    champ_p.add_argument      ("-c", "--constructor", action="store_true", help="Show constructor standing instead of driver")
 
     args = p.parse_args()
 
-    main(args)
+    if any(vars(args).values()):
+        main(args)
+    else:
+        p.print_help()

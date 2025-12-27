@@ -4,7 +4,6 @@ SELECT
     race_data.position_text,
     season_driver_standing.points,
     race_data.race_pole_position,
-    race_data.race_fastest_lap,
     constructor.name,
     season_constructor_standing.points
 FROM
