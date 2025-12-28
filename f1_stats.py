@@ -49,6 +49,17 @@ def best_lap(circuit_id: str, rows=15, is_reversed=False):
     else:
         print_table(fetched, headers)
 
+def best_qual(circuit_id: str, rows=15, is_reversed=False):
+    run_sql("best-qualifying", [circuit_id])
+
+    fetched = cur.fetchall() if rows == -1 else cur.fetchmany(rows)
+    headers = [c[0] for c in cur.description]
+
+    if is_reversed:
+        print_table(fetched[::-1], headers, double_headers=True, hide_nones=True)
+    else:
+        print_table(fetched, headers, double_headers=True, hide_nones=True)
+
 def championship(year: int, is_constructor=False):
     cur.execute(
         "SELECT grand_prix.abbreviation FROM grand_prix JOIN race on race.year = ? WHERE race.grand_prix_id = grand_prix.id"
@@ -114,7 +125,10 @@ def main(args: any):
     match args.command:
         case "circuit":
             if args.best_lap:
-                best_lap(args.id, is_reversed=args.reverse)
+                best_lap(args.id, args.rows, args.reverse)
+
+            if args.qualifying_record:
+                best_qual(args.id, args.rows, args.reverse)
         
         case "champ":
             championship(args.year, args.constructor)
@@ -133,7 +147,9 @@ if __name__ == "__main__":
 
     circuit_p = subps.add_parser("circuit", help="Get different records for a circuit")
     circuit_p.add_argument      ("id", metavar="ID", type=str, help="Circuit id")
-    circuit_p.add_argument      ("-bl", "--best-lap", action="store_true", help="Get list of all time best laps")
+    circuit_p.add_argument      ("-bl", "--best-lap", action="store_true", help="All time best laps during the race")
+    circuit_p.add_argument      ("-qr", "--qualifying-record", action="store_true", help="All time best qualifying records")
+    circuit_p.add_argument      ("-r", "--rows", type=int, default=15, help="Amount of rows to fetch")
     circuit_p.add_argument      ("-R", "--reverse", action="store_true", help="Reverse results")
 
     driver_p = subps.add_parser("driver", help="Different driver's statistics, data over the season")
