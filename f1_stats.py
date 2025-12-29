@@ -50,6 +50,41 @@ def circuit(circuit_id: str, sql: str, rows=15, is_reversed=False):
     else:
         print_table(fetched, headers, double_headers=True)
 
+def circuit_info(circuit_id: str, years_per_row=8):
+    cur.execute(
+        "SELECT circuit.*, GROUP_CONCAT(race.year ,',') as years FROM circuit JOIN race on race.circuit_id = :id WHERE circuit.id = :id"
+    , {"id": circuit_id})
+
+    fetched = cur.fetchone()
+
+    if not fetched or fetched[0] is None:
+        return print(f"Circuit: \"{circuit_id}\" was not found")
+
+    _, name, full_name, prev_names, circuit_type, direction, \
+    place, country_id, lat, lon, length, turns, total_races, races_years = fetched
+
+    print()
+    print(f"* {name} ({full_name})")
+    print(f"At: {country_id} - {place}")
+    print(f"Lenght: {length}km, turns: {turns}")
+    print(f"Total races held: {total_races}")
+    years = races_years.split(',')
+
+    for i in range(0, len(years), years_per_row):
+        print('\t' + ','.join(years[i:i+years_per_row]))
+
+    if prev_names:
+        print(f"Previous names: \n\t{prev_names}")
+
+    print()
+    print(f"Direction: {direction.lower()}")        
+    print(f"Type: {circuit_type.lower()}")
+    print()
+    print("Coordinates: ")
+    print(f"{lat},{lon}")
+    print()
+
+
 def search(part: str, table: str, column: str, overwrite_pattern=False):
     pattern = part if overwrite_pattern else f"%{part}%"
 
