@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import sqlite3, os
 from lib.tables import print_table
 from statistics import mean
@@ -39,26 +40,15 @@ def driver_season(driver_id: str, year: int):
 
     print_table(out_rows, headers, hide_nones=True, double_headers=True)
 
-def best_lap(circuit_id: str, rows=15, is_reversed=False):
-    run_sql("best-lap", [circuit_id])
+def circuit(circuit_id: str, sql: str, rows=15, is_reversed=False):
+    run_sql(sql, [circuit_id])
     fetched = cur.fetchall() if rows == -1 else cur.fetchmany(rows)
     headers = [c[0] for c in cur.description]
 
     if is_reversed:
-        print_table(fetched[::-1], headers)
+        print_table(fetched[::-1], headers, double_headers=True)
     else:
-        print_table(fetched, headers)
-
-def best_qual(circuit_id: str, rows=15, is_reversed=False):
-    run_sql("best-qualifying", [circuit_id])
-
-    fetched = cur.fetchall() if rows == -1 else cur.fetchmany(rows)
-    headers = [c[0] for c in cur.description]
-
-    if is_reversed:
-        print_table(fetched[::-1], headers, double_headers=True, hide_nones=True)
-    else:
-        print_table(fetched, headers, double_headers=True, hide_nones=True)
+        print_table(fetched, headers, double_headers=True)
 
 def championship(year: int, is_constructor=False):
     cur.execute(
@@ -125,10 +115,13 @@ def main(args: any):
     match args.command:
         case "circuit":
             if args.best_lap:
-                best_lap(args.id, args.rows, args.reverse)
+                circuit(args.id, "best-lap", args.rows, args.reverse)
 
-            if args.qualifying_record:
-                best_qual(args.id, args.rows, args.reverse)
+            if args.best_qualifying:
+                circuit(args.id, "best-qualifying", args.rows, args.reverse)
+
+            if args.most_wins:
+                circuit(args.id, "most-wins", args.rows, args.reverse)
         
         case "champ":
             championship(args.year, args.constructor)
@@ -148,7 +141,8 @@ if __name__ == "__main__":
     circuit_p = subps.add_parser("circuit", help="Get different records for a circuit")
     circuit_p.add_argument      ("id", metavar="ID", type=str, help="Circuit id")
     circuit_p.add_argument      ("-bl", "--best-lap", action="store_true", help="All time best laps during the race")
-    circuit_p.add_argument      ("-qr", "--qualifying-record", action="store_true", help="All time best qualifying records")
+    circuit_p.add_argument      ("-bq", "--best-qualifying", action="store_true", help="All time best qualifying records")
+    circuit_p.add_argument      ("-mw", "--most-wins", action="store_true", help="List of drivers with most wins")
     circuit_p.add_argument      ("-r", "--rows", type=int, default=15, help="Amount of rows to fetch")
     circuit_p.add_argument      ("-R", "--reverse", action="store_true", help="Reverse results")
 

@@ -1,4 +1,7 @@
-SELECT *
+SELECT
+    ROW_NUMBER() OVER 
+        (ORDER BY best ASC) AS '',
+    t.*
 FROM (
     SELECT 
         race.year,
@@ -35,4 +38,3 @@ FROM (
 ) t
 WHERE 
     t.best is not NULL
-ORDER BY best ASC;
