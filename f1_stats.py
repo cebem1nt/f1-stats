@@ -59,23 +59,43 @@ def execute_sql(file: str | None):
     finally:
         if is_tmp: os.remove(file)
 
-def driver_season(driver_id: str, year: int):
-    run_sql("driver-season", { "id": driver_id, "year": year })
+def driver_season_table(driver_id: str, year: int):
+    run_sql("driver-season-table", { "id": driver_id, "year": year })
 
     rows = cur.fetchall()
-    headers = [c[0] for c in cur.description[2:]]
-    out_rows = [] 
+    headers = [c[0] for c in cur.description[5:]]
+    out_rows = []
+    comments = []
 
-    for is_fastest, is_pole, *row in rows:
+    teams_played = defaultdict(int)
+
+    for is_fastest, is_pole, reason_retired, team, pts_pos_gained, *row in rows:
+        if reason_retired is not None:
+            comments.append(f"* Retired because of - {reason_retired}")
+            row[6] += '*'
+
         if is_pole:
-           row[2] += SUP_P
+            row[6] += SUP_P
 
         if is_fastest:
-            row[2] += SUP_F
+            row[6] += SUP_F
+
+        if pts_pos_gained:
+            sign = '+' if pts_pos_gained > 0 else ''
+            row[-2] += f" ({sign}{pts_pos_gained})"
         
         out_rows.append(row)
+        teams_played[team] += 1
+
+    comments.append('-' * 40)
+    for team, total in teams_played.items():
+        if len(teams_played) == 1:
+            comments.append(f"All {total} games played in: {team}")
+        else:
+            comments.append(f"{total} played in {team}")
 
     print_table(out_rows, headers, hide_nones=True, double_headers=True)
+    print('\n'.join(comments), end="\n\n")
 
 def circuit(circuit_id: str, sql: str, rows=15, is_reversed=False):
     run_sql(sql, [circuit_id])
@@ -228,8 +248,8 @@ def main(args: any):
             season(args.year, args.constructor)
         
         case "driver":
-            if args.season:
-                driver_season(args.id, args.year)
+            if args.season_table:
+                driver_season_table(args.id, args.year)
 
         case "db":
             if args.sql:
@@ -274,7 +294,8 @@ if __name__ == "__main__":
     driver_p = subps.add_parser("driver", help="Different driver's statistics, data over the season")
     driver_p.add_argument      ("id", metavar="ID", type=str, help="Driver id")
     driver_p.add_argument      ("year", metavar="YEAR", type=str, help="Season year")
-    driver_p.add_argument      ("-s", "--season", action="store_true", help="Get overall driver's statistics over season")
+    driver_p.add_argument      ("-o", "--overview", action="store_true", help="Get overall driver's statistics over season")
+    driver_p.add_argument      ("-st", "--season-table", action="store_true", help="Get a table of driver's races of season")
     
     champ_p = subps.add_parser("season", help="Fancy wikipedia like season table for driver/constructor championship")
     champ_p.add_argument      ("year", metavar="YEAR", type=str, help="Season year")
