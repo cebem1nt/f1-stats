@@ -1,26 +1,63 @@
 #!/usr/bin/env python3
-import sqlite3, os
+import sqlite3, os, subprocess
+
 from lib.tables import print_table
 from statistics import mean
 from argparse import ArgumentParser
 from collections import defaultdict
 
 from itertools import islice
+from os.path import join
+
+ROOT_DIR = os.path.dirname(os.path.realpath(__file__))
+DATABASE_DIR = join(ROOT_DIR, "data", "f1db.db")
+SQL_SCRIPTS_DIR = join(ROOT_DIR, "sql")
 
 SUP_F = "\u1DA0"
 SUP_P = "\u1D56"
 
-conn = sqlite3.connect("data/f1db.db")
+conn = sqlite3.connect(DATABASE_DIR)
 cur = conn.cursor()
 
 def ifnone(data: any, then: any):
     return data if data is not None else then
 
-def run_sql(name: str, params: list | dict):
-    with open(os.path.join("sql", name + ".sql")) as f:
+def run_sql(name: str, params=None):
+    with open(join(SQL_SCRIPTS_DIR, name + ".sql")) as f:
         sql = f.read()
 
-    cur.execute(sql, params)
+    if params:
+        cur.execute(sql, params)
+    else:
+        cur.execute(sql)
+
+def execute_sql(file: str | None):
+    is_tmp = False
+
+    if file is None:
+        file = "tmp.sql"
+        os.system(f"{os.getenv("EDITOR", "nano")} {file}")
+        
+        if not os.path.exists(file):
+            return
+
+        is_tmp = True
+
+    try:
+        content = None
+        with open(file) as f:
+            content = f.read()
+        
+        cur.execute(content)
+        fetched = cur.fetchall()
+        headers = [c[0] for c in cur.description]
+        print_table(fetched, headers, double_headers=True)
+
+    except FileNotFoundError:
+        return print(f"File \"{file}\" does not exist")
+
+    finally:
+        if is_tmp: os.remove(file)
 
 def driver_season(driver_id: str, year: int):
     run_sql("driver-season", { "id": driver_id, "year": year })
@@ -107,7 +144,7 @@ def search(part: str, table: str, column: str, overwrite_pattern=False):
         for i in range(len(headers)):
             print(f"{headers[i]}: {found[i]}")
 
-def championship(year: int, is_constructor=False):
+def season(year: int, is_constructor=False):
     cur.execute(
         "SELECT grand_prix.abbreviation FROM grand_prix JOIN race on race.year = ? WHERE race.grand_prix_id = grand_prix.id"
     , [year])
@@ -187,12 +224,22 @@ def main(args: any):
             if args.most_podiums:
                 circuit(args.id, "most-podiums", args.rows, args.reverse)
         
-        case "champ":
-            championship(args.year, args.constructor)
+        case "season":
+            season(args.year, args.constructor)
         
         case "driver":
             if args.season:
                 driver_season(args.id, args.year)
+
+        case "db":
+            if args.sql:
+                execute_sql(args.sql)
+
+            if args.update:
+                subprocess.run(
+                    [join(ROOT_DIR, "install")], 
+                    check=True
+                )
 
         case "search":
             if args.driver:
@@ -204,7 +251,7 @@ def main(args: any):
             elif args.grand_prix:
                 table = "grand_prix"
             else:
-                return print("I dont know what to search for...")
+                return print("I don't know what to search for...")
             
             search(args.part, table, args.column, args.overwrite_pattern)
         case _:
@@ -229,7 +276,7 @@ if __name__ == "__main__":
     driver_p.add_argument      ("year", metavar="YEAR", type=str, help="Season year")
     driver_p.add_argument      ("-s", "--season", action="store_true", help="Get overall driver's statistics over season")
     
-    champ_p = subps.add_parser("champ", help="Fancy wikipedia like season table for driver/constructor champ")
+    champ_p = subps.add_parser("season", help="Fancy wikipedia like season table for driver/constructor championship")
     champ_p.add_argument      ("year", metavar="YEAR", type=str, help="Season year")
     champ_p.add_argument      ("-c", "--constructor", action="store_true", help="Show constructor standing instead of driver")
 
@@ -241,6 +288,10 @@ if __name__ == "__main__":
     search_p.add_argument      ("-gp", "--grand-prix", action="store_true", help="Search for grand prix")
     search_p.add_argument      ("-C", "--column", type=str, default="name", help="Colum to match part, defaults to \"name\"")
     search_p.add_argument      ("-op", "--overwrite-pattern", action="store_true", help="Treat part as entire pattern for sql LIKE when searching")
+
+    db_p = subps.add_parser("db", help="Different database related commands")
+    db_p.add_argument      ("-s", "--sql", type=str, nargs='?', help="Run arbitrary sql on the f1db")
+    db_p.add_argument      ("-u", "--update", action="store_true", help="Update/init f1db")
 
     args = p.parse_args()
 
