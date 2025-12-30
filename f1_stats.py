@@ -16,6 +16,10 @@ SQL_SCRIPTS_DIR = join(ROOT_DIR, "sql")
 SUP_F = "\u1DA0"
 SUP_P = "\u1D56"
 
+is_double_headers = False
+is_no_delims = False
+adjustment = "left"
+
 conn = sqlite3.connect(DATABASE_DIR)
 cur = conn.cursor()
 
@@ -51,7 +55,14 @@ def execute_sql(file: str | None):
         cur.execute(content)
         fetched = cur.fetchall()
         headers = [c[0] for c in cur.description]
-        print_table(fetched, headers, double_headers=True)
+        
+        print_table(
+            fetched, 
+            headers,        
+            double_headers=is_double_headers,
+            adjustment=adjustment,
+            hide_delimiters=is_no_delims
+        )
 
     except FileNotFoundError:
         return print(f"File \"{file}\" does not exist")
@@ -68,17 +79,18 @@ def driver_season_table(driver_id: str, year: int):
     comments = []
 
     teams_played = defaultdict(int)
+    FINISHED_COL = 5
 
     for is_fastest, is_pole, reason_retired, team, pts_pos_gained, *row in rows:
         if reason_retired is not None:
             comments.append(f"* Retired because of - {reason_retired}")
-            row[6] += '*'
+            row[FINISHED_COL] += '*'
 
         if is_pole:
-            row[6] += SUP_P
+            row[FINISHED_COL] += SUP_P
 
         if is_fastest:
-            row[6] += SUP_F
+            row[FINISHED_COL] += SUP_F
 
         if pts_pos_gained:
             sign = '+' if pts_pos_gained > 0 else ''
@@ -92,10 +104,64 @@ def driver_season_table(driver_id: str, year: int):
         if len(teams_played) == 1:
             comments.append(f"All {total} games played in: {team}")
         else:
-            comments.append(f"{total} played in {team}")
+            comments.append(f"{total} games played in {team}")
 
-    print_table(out_rows, headers, hide_nones=True, double_headers=True)
+    print_table(
+        out_rows, 
+        headers, 
+        double_headers=is_double_headers,
+        adjustment=adjustment,
+        hide_delimiters=is_no_delims
+    )
+    
     print('\n'.join(comments), end="\n\n")
+
+def driver_pit_stops(driver_id: str, year: int):
+    run_sql("driver-season-pits", {"id": driver_id, "year": year})
+    fetched = cur.fetchall()
+
+    races_pits = defaultdict(list)
+    most_pits = -1
+
+    for race, lap, time in fetched:
+        pit = {
+            "lap": lap,
+            "time": time
+        }
+
+        races_pits[race].append(pit)
+        total_pits = len(races_pits[race])
+
+        if  total_pits > most_pits:
+            most_pits = total_pits
+
+    out_rows = []
+    headers = [f"pit {i+1}" for i in range(most_pits)]
+
+    for race, pits in races_pits.items():
+        row = [race]
+        total_pits = 0
+        
+        for i in range(most_pits):
+            if i >= len(pits):
+                row.append(None)
+                continue
+
+            pit = pits[i]
+            row.append(f"lap {pit["lap"]} - {pit["time"]}")
+            total_pits += 1
+
+        row.append(total_pits)
+        out_rows.append(row)
+
+    print_table(
+        out_rows, 
+        [''] + headers + ["total"], 
+        double_headers=is_double_headers,
+        adjustment=adjustment,
+        hide_delimiters=is_no_delims
+    )
+
 
 def circuit(circuit_id: str, sql: str, rows=15, is_reversed=False):
     run_sql(sql, [circuit_id])
@@ -103,9 +169,15 @@ def circuit(circuit_id: str, sql: str, rows=15, is_reversed=False):
     headers = [c[0] for c in cur.description]
 
     if is_reversed:
-        print_table(fetched[::-1], headers, double_headers=True)
-    else:
-        print_table(fetched, headers, double_headers=True)
+        fetched.reverse()
+
+    print_table(
+        fetched, 
+        headers, 
+        double_headers=is_double_headers,
+        adjustment=adjustment,
+        hide_delimiters=is_no_delims
+    )
 
 def circuit_info(circuit_id: str, years_per_row=8):
     cur.execute(
@@ -219,13 +291,22 @@ def season(year: int, is_constructor=False):
             pos += 1
 
     print_table(
-        out_rows,
-        ["pos", "name"] + grandprix_cols + ["pts"],
-        hide_nones=True,
-        double_headers=True
+        rows=out_rows,
+        headers=["pos", "name"] + grandprix_cols + ["pts"],
+        double_headers=is_double_headers,
+        adjustment=adjustment,
+        hide_delimiters=is_no_delims
     )
 
 def main(args: any):
+    global is_double_headers
+    global is_no_delims
+    global adjustment
+
+    is_double_headers = args.double_headers
+    is_no_delims = args.no_delimiters
+    adjustment = args.adjustment
+
     match args.command:
         case "circuit":
             if not args.best_lap and not args.best_qualifying and \
@@ -248,8 +329,11 @@ def main(args: any):
             season(args.year, args.constructor)
         
         case "driver":
-            if args.season_table:
+            if args.season:
                 driver_season_table(args.id, args.year)
+            
+            if args.pit_stops:
+                driver_pit_stops(args.id, args.year)
 
         case "db":
             if args.sql:
@@ -264,7 +348,7 @@ def main(args: any):
         case "search":
             if args.driver:
                 table = "driver"
-            elif args.team:
+            elif args.constructor:
                 table = "constructor"
             elif args.circuit:
                 table = "circuit"
@@ -281,6 +365,9 @@ if __name__ == "__main__":
     p = ArgumentParser(description="Diferrent charts, statistics, records, all time bests of Formula One")
 
     subps = p.add_subparsers(dest="command", help="Available commands")
+    p.add_argument("--double-headers", action="store_true", help="Print table headers twice (at the top and bottom)")
+    p.add_argument("--no-delimiters", action="store_true", help="Do not print any separators for tables")
+    p.add_argument("--adjustment", default="left", choices=("left", "center", "right"), help="Table text alignment")
 
     circuit_p = subps.add_parser("circuit", help="Get different records for a circuit")
     circuit_p.add_argument      ("id", metavar="ID", type=str, help="Circuit id")
@@ -294,8 +381,8 @@ if __name__ == "__main__":
     driver_p = subps.add_parser("driver", help="Different driver's statistics, data over the season")
     driver_p.add_argument      ("id", metavar="ID", type=str, help="Driver id")
     driver_p.add_argument      ("year", metavar="YEAR", type=str, help="Season year")
-    driver_p.add_argument      ("-o", "--overview", action="store_true", help="Get overall driver's statistics over season")
-    driver_p.add_argument      ("-st", "--season-table", action="store_true", help="Get a table of driver's races of season")
+    driver_p.add_argument      ("-s", "--season", action="store_true", help="Get a table of driver's races of season")
+    driver_p.add_argument      ("-p", "--pit-stops", action="store_true", help="Get a table of pit stops for each race")
     
     champ_p = subps.add_parser("season", help="Fancy wikipedia like season table for driver/constructor championship")
     champ_p.add_argument      ("year", metavar="YEAR", type=str, help="Season year")
@@ -304,10 +391,10 @@ if __name__ == "__main__":
     search_p = subps.add_parser("search", help="Search for different things by name")
     search_p.add_argument      ("part", metavar="PART", type=str, help="Part to search for")
     search_p.add_argument      ("-d", "--driver", action="store_true", help="Search for driver")
-    search_p.add_argument      ("-t", "--team", action="store_true", help="Search for a team (constructor)")
-    search_p.add_argument      ("-c", "--circuit", action="store_true", help="Search for circuit")
+    search_p.add_argument      ("-c", "--constructor", action="store_true", help="Search for a constructor (team)")
+    search_p.add_argument      ("-C", "--circuit", action="store_true", help="Search for circuit")
     search_p.add_argument      ("-gp", "--grand-prix", action="store_true", help="Search for grand prix")
-    search_p.add_argument      ("-C", "--column", type=str, default="name", help="Colum to match part, defaults to \"name\"")
+    search_p.add_argument      ("-col", "--column", type=str, default="name", help="Colum to match part, defaults to \"name\"")
     search_p.add_argument      ("-op", "--overwrite-pattern", action="store_true", help="Treat part as entire pattern for sql LIKE when searching")
 
     db_p = subps.add_parser("db", help="Different database related commands")

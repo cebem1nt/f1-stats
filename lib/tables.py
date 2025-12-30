@@ -1,9 +1,9 @@
-def to_str(item: any, empty_nones=False):
+def to_str(item: any, show_nones=False):
     if item is None:
-        if empty_nones:
-            return " "
-        else:
+        if show_nones:
             return "None"
+        else:
+            return " "
 
     return str(item)
 
@@ -25,7 +25,7 @@ def print_headers(
     headers: list[str],
     widths: list[int],
     adjustment: str,
-    hide_nones=False,
+    show_nones=False,
     is_reversed=False,
     hide_delimiters=False
 ):
@@ -36,7 +36,7 @@ def print_headers(
     hyph = '-' if not hide_delimiters else ' '
 
     for i, header in enumerate(headers):
-        adjusted = adjust(to_str(header, hide_nones), widths[i], adjustment)
+        adjusted = adjust(to_str(header, show_nones), widths[i], adjustment)
         header_line += f"{sep} {adjusted} "
         med_separator += f"{sep}{hyph}{hyph * widths[i]}{hyph}"
     
@@ -51,7 +51,7 @@ def print_rows(
     rows: list[any],
     widths: list[int],
     adjustment: str,
-    hide_nones: bool,
+    show_nones=False,
     hide_delimiters=False
 ):
     line = ""
@@ -59,7 +59,7 @@ def print_rows(
 
     for row in rows:
         for i in range(len(row)):
-            element = to_str(row[i], hide_nones)
+            element = to_str(row[i], show_nones)
             line += f"{sep} {adjust(element, widths[i], adjustment)} "
 
         print(line + sep)
@@ -69,14 +69,14 @@ def print_table(
     rows: list[any],
     headers: list[str],
     adjustment="left",
-    hide_nones=False,
     hide_delimiters=False,
-    double_headers=False
+    double_headers=False,
+    show_nones=False
 ):
     if len(rows) and len(headers) != len(rows[0]):
         return
 
-    widths = [len(to_str(h, hide_nones)) for h in headers]
+    widths = [len(to_str(h, show_nones)) for h in headers]
 
     for row in rows:
         for j in range(len(headers)):
@@ -86,10 +86,10 @@ def print_table(
                 widths[j] = column_len
 
     print()
-    print_headers(headers, widths, adjustment, hide_nones, hide_delimiters=hide_delimiters)
-    print_rows(rows, widths, adjustment, hide_nones, hide_delimiters)
+    print_headers(headers, widths, adjustment, show_nones, hide_delimiters=hide_delimiters)
+    print_rows(rows, widths, adjustment, show_nones, hide_delimiters)
     
     if double_headers:
-        print_headers(headers, widths, adjustment, hide_nones, True, hide_delimiters)
+        print_headers(headers, widths, adjustment, show_nones, True, hide_delimiters)
     
     print()

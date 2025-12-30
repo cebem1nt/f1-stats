@@ -8,11 +8,12 @@ SELECT
     q.qualifying_q1 as q1,
     q.qualifying_q2 as q2,
     q.qualifying_q3 as q3,
-    rd.race_laps as laps,
     rd.race_grid_position_text as start,
     rd.position_text as finish,
     rd.race_positions_gained as gained,
     rd.race_gap as gap,
+    rd.race_laps as laps,
+    rd.race_pit_stops as pits,
     race_driver_standing.position_text as pos,
     race_driver_standing.points as pts
 FROM 
