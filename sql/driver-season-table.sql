@@ -12,7 +12,7 @@ SELECT
     rd.position_text as finish,
     rd.race_positions_gained as gained,
     rd.race_gap as gap,
-    rd.race_laps as laps,
+    rd.race_laps as laps, 
     rd.race_pit_stops as pits,
     race_driver_standing.position_text as pos,
     race_driver_standing.points as pts

@@ -2,7 +2,7 @@
 import sqlite3, os, subprocess
 
 from lib.tables import print_table
-from statistics import mean
+from statistics import mean, stdev
 from argparse import ArgumentParser
 from collections import defaultdict
 
@@ -162,6 +162,158 @@ def driver_pit_stops(driver_id: str, year: int):
         hide_delimiters=is_no_delims
     )
 
+
+def push_top2(top: dict, kind: str, val: int):
+    a, b = top[kind]
+
+    if val > a:
+        top[kind] = [val, a]
+    elif val > b:
+        top[kind][1] = val
+
+def driver_overview(driver_id: str, year: int):
+    run_sql("driver-season-overview", {"id": driver_id, "year": year})
+    fetched = cur.fetchall()
+
+    per_race_pts_made = []
+    grid_postitions = []
+    finish_positions = []
+    gained_positions = []
+
+    gains = 0
+    losses = 0
+
+    # streaks
+    cws = cps = cpts = 0
+    lws = lps = lpts = 0
+
+    q3_total = 0
+    total_races = 0
+    finished_races = 0
+    total_wins = 0
+    total_podiums = 0
+    score_finishes = 0
+    total_pts = 0
+    total_fastest = 0
+    total_poles = 0
+    total_penalties = 0 
+
+    for gp, is_fastest, is_pole, q3, start, finish, gained, \
+        gap, laps, penalty, pts_after_race, pts_made in fetched:
+
+        if start:
+            grid_postitions.append(start)
+        
+        if gained:
+            gained_positions.append(gained)            
+
+        if penalty:
+            total_penalties += 1
+
+        if q3:
+            q3_total += 1
+
+        if not finish:
+            lws, cws = max(lws, cws), 0
+            lps, cps = max(lps, cps), 0
+            lpts, cpts = max(lpts, cpts), 0
+        else:
+            cws = cws + 1 if finish == 1 else 0
+            cps = cps + 1 if finish <= 3 else 0
+            cpts = cpts + 1 if (pts_made or 0) > 0 else 0
+
+        if finish:
+            finish_positions.append(finish)
+            finished_races += 1
+
+            if finish < start:
+                gains += 1
+            elif finish > start:
+                losses += 1
+
+            if finish == 1:
+                total_wins += 1
+
+            if finish <= 3:
+                total_podiums += 1
+
+            if finish <= 10:
+                score_finishes += 1
+            
+        total_races += 1
+        total_poles += ifnone(is_pole, 0)
+        total_fastest += ifnone(is_fastest, 0)
+        per_race_pts_made.append(ifnone(pts_made, 0))
+        total_pts = pts_after_race
+
+    longest_win_streak = max(lws, cws)
+    longest_pod_streak = max(lps, cps)
+    longest_pts_streak = max(lpts, cpts)
+
+    pole_conversion = total_poles / q3_total
+    finish_rate = finished_races / total_races
+    pts_per_race = total_pts / total_races
+
+    win_rate = total_wins / total_races
+    podium_rate = total_podiums / total_races
+    scoring_rate = score_finishes / total_races
+    pole_rate = total_poles / total_races
+    fastest_lap_rate = total_fastest / total_races
+
+    dnfs = total_races - finished_races
+    dnf_rate = dnfs / total_races
+
+    avg_per_race_pts = mean(per_race_pts_made)
+    avg_finish_position = mean(finish_positions) 
+    avg_grid_position = mean(grid_postitions)
+    avg_gained_positions = mean(gained_positions)
+
+    avg_points_when_scoring = total_pts / score_finishes
+    no_pos_change = finished_races - gains - losses
+    
+    pct_gain = gains / finished_races 
+    pct_loss = losses / finished_races 
+    pct_no_change = no_pos_change / finished_races 
+
+    finish_pos_cv = stdev(finish_positions) / avg_finish_position
+    pts_volatility = stdev(per_race_pts_made)
+
+    print(f"\nSeason overview — {driver_id}, {year}")
+    print("-" * 50)
+    print(f"Races: {total_races}  Finished: {finished_races}  DNFs: {dnfs}  DNF rate: {dnf_rate:.1%}\n")
+
+    print("Points")
+    print(f"- Total pts: {total_pts} pts")
+    print(f"- Avg pts / race: {pts_per_race:.2f} pts")
+    print(f"- Avg pts when scoring: {avg_points_when_scoring:.2f} pts")
+    print(f"- Points volatility (std): {pts_volatility:.2f} pts\n")
+
+    print("Results & rates")
+    print(f"- Wins: {total_wins}  (Win rate: {win_rate:.1%})")
+    print(f"- Podiums: {total_podiums}  (Podium rate: {podium_rate:.1%})")
+    print(f"- Scoring finishes: {score_finishes}  (Scoring rate: {scoring_rate:.1%})")
+    print(f"- Finish rate: {finish_rate:.1%}")
+    print(f"- Avg finish position: {avg_finish_position:.2f}")
+    print(f"- Finish position CV (coefficient of variation): {finish_pos_cv:.3f}\n")
+
+    print("Qualifying & starts")
+    print(f"- Poles: {total_poles}  (Pole rate: {pole_rate:.1%})")
+    print(f"- Q3 appearances: {q3_total}")
+    print(f"- Pole conversion (poles / Q3s): {pole_conversion:.1%}")
+    print(f"- Avg grid position: {avg_grid_position:.2f}")
+    print(f"- Penalties: {total_penalties}\n")
+
+    print("Race progress")
+    print(f"- Avg positions gained per race: {avg_gained_positions:.2f}")
+    print(f"- % races net gain: {pct_gain:.1%}")
+    print(f"- % races net loss: {pct_loss:.1%}")
+    print(f"- % races no change: {pct_no_change:.1%}")
+    # print(f"- Longest podium streak: {longest_pod_streak}")
+    # print(f"- Longest win streak: {longest_win_streak}")
+    # print(f"- Longest points streak: {longest_pts_streak}\n")
+
+    print("Fastest laps")
+    print(f"- Fastest laps: {total_fastest}  (Fastest-lap rate: {fastest_lap_rate:.1%})\n")
 
 def circuit(circuit_id: str, sql: str, rows=15, is_reversed=False):
     run_sql(sql, [circuit_id])
@@ -335,6 +487,9 @@ def main(args: any):
             if args.pit_stops:
                 driver_pit_stops(args.id, args.year)
 
+            if args.overview:
+                driver_overview(args.id, args.year)
+
         case "db":
             if args.sql:
                 execute_sql(args.sql)
@@ -382,13 +537,14 @@ if __name__ == "__main__":
     driver_p.add_argument      ("id", metavar="ID", type=str, help="Driver id")
     driver_p.add_argument      ("year", metavar="YEAR", type=str, help="Season year")
     driver_p.add_argument      ("-s", "--season", action="store_true", help="Get a table of driver's races of season")
+    driver_p.add_argument      ("-o", "--overview", action="store_true", help="Get an overview, and driver statistics for a season")
     driver_p.add_argument      ("-p", "--pit-stops", action="store_true", help="Get a table of pit stops for each race")
     
     champ_p = subps.add_parser("season", help="Fancy wikipedia like season table for driver/constructor championship")
     champ_p.add_argument      ("year", metavar="YEAR", type=str, help="Season year")
     champ_p.add_argument      ("-c", "--constructor", action="store_true", help="Show constructor standing instead of driver")
 
-    search_p = subps.add_parser("search", help="Search for different things by name")
+    search_p = subps.add_parser("search", help="Search for different rows in tables by name")
     search_p.add_argument      ("part", metavar="PART", type=str, help="Part to search for")
     search_p.add_argument      ("-d", "--driver", action="store_true", help="Search for driver")
     search_p.add_argument      ("-c", "--constructor", action="store_true", help="Search for a constructor (team)")
