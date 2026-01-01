@@ -3,6 +3,7 @@ SELECT
     rd.race_fastest_lap,
     rd.race_pole_position,
     q.qualifying_q3_millis,
+    rd.race_pit_stops,
     rd.race_grid_position_number,
     rd.position_number,
     rd.position_text,
@@ -13,7 +14,8 @@ SELECT
     rd.race_time_penalty,
     rds.points,
     rd.race_points,
-    rds.position_number
+    rds.position_number,
+    rcs.points
 FROM 
     race_data rd
 JOIN 
@@ -29,6 +31,9 @@ LEFT JOIN
 LEFT JOIN
     race_driver_standing rds on rds.race_id = r.id
     and rds.driver_id = :id
+LEFT JOIN
+    race_constructor_standing rcs on rcs.race_id = r.id and
+    rcs.constructor_id = rd.constructor_id
 WHERE 
     rd.driver_id = :id and 
     rd.type = 'RACE_RESULT' and 

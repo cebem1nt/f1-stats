@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-import sqlite3, os, subprocess
+from statistics import mean, stdev, median, median_low, median_high, mode
 
+import sqlite3, os, subprocess
 from lib.tables import print_table
-from statistics import mean, stdev
 from argparse import ArgumentParser
 from collections import defaultdict
 from typing import Callable
@@ -190,14 +190,17 @@ def driver_overview(driver_id: str, year: int):
         return print("Couldn't find anything")
 
     per_race_pts_made = []
+    per_race_team_pts_made = []
     grid_postitions = []
     finish_positions = []
     gained_positions = []
+    race_pit_stops = []
     season_pts_pos = None
 
     total = {
         "gains": 0,
         "losses": 0,
+        "q1_q2_elim": 0,
         "q3": 0,
         "races": 0,
         "finished": 0,
@@ -205,6 +208,7 @@ def driver_overview(driver_id: str, year: int):
         "podiums": 0,
         "score_finishes": 0,
         "pts": 0,
+        "team_pts": 0,
         "fastest_laps": 0,
         "poles": 0,
         "penalties": 0,
@@ -221,27 +225,27 @@ def driver_overview(driver_id: str, year: int):
     longest_pod_streak = Streak(lambda x: x and x <= 3)
     longest_pts_streak = Streak(lambda x: x and x <= 10)
 
-    for gp, is_fastest, is_pole, q3, start, finish, finish_text, reason_retired, gained, \
-        gap, laps, penalty, pts_after_race, pts_made, pts_pos_after in fetched:
+    for gp, is_fastest, is_pole, q3, pits, start, finish, finish_text, reason_retired, gained,\
+        gap, laps, penalty, pts_after_race, pts_made, pts_pos_after, team_pts_after_race in fetched:
 
         longest_win_streak.update(finish)
         longest_pod_streak.update(finish)
         longest_pts_streak.update(finish)
 
+        pts_made = ifnone(pts_made, 0)
+        team_pts_after_race = ifnone(team_pts_after_race, 0)
+
         if not start and finish: # PL start case
             start = finish + gained
 
-        if start:
-            grid_postitions.append(start)
-        
-        if gained:
-            gained_positions.append(gained)            
-      
-        if penalty:
-            total["penalties"] += 1
+        # Old records don't have q1, q2, q3
+        if q3: total["q3"] += 1
+        else: total["q1_q2_elim"] += 1
 
-        if q3:
-            total["q3"] += 1
+        if start: grid_postitions.append(start)
+        if gained: gained_positions.append(gained)            
+        if penalty: total["penalties"] += 1
+        if pits: race_pit_stops.append(pits)
 
         if finish:
             finish_positions.append(finish)
@@ -265,12 +269,16 @@ def driver_overview(driver_id: str, year: int):
             nfs[finish_text][1].append(gp)
             nfs[finish_text][2].append(reason_retired)
 
+        team_pts_made = team_pts_after_race - total["team_pts"]
+
         total["races"] += 1
         total["poles"] += ifnone(is_pole, 0)
         total["fastest_laps"] += ifnone(is_fastest, 0)
         total["pts"] = pts_after_race
+        total["team_pts"] = team_pts_after_race
         season_pts_pos = pts_pos_after
-        per_race_pts_made.append(ifnone(pts_made, 0))
+        per_race_pts_made.append(pts_made)
+        per_race_team_pts_made.append(team_pts_made)
 
     pole_conversion = total["poles"] / total["q3"] if total["q3"] else 0
     finish_rate = total["finished"] / total["races"]
@@ -284,51 +292,101 @@ def driver_overview(driver_id: str, year: int):
 
     not_finished = total["races"] - total["finished"]
     not_finished_rate = not_finished / total["races"]
+    q1_q2_elim_rate = total["q1_q2_elim"] / total["races"]
     
     avg_per_race_pts = mean(per_race_pts_made)
     avg_finish_position = mean(finish_positions) 
     avg_grid_position = mean(grid_postitions)
     avg_gained_positions = mean(gained_positions)
+    avg_race_pit_stops = mean(race_pit_stops) if race_pit_stops else 0
+
+    median_grid_position = median(grid_postitions)
+    mode_grid_position = mode(finish_positions)
+
+    median_finish_position = median(finish_positions)
+    mode_finish_position = mode(finish_positions)
 
     avg_points_when_scoring = total["pts"] / total["score_finishes"] if total["score_finishes"] else 0
     no_pos_change = total["finished"] - total["gains"] - total["losses"]
     
-    pct_gain = total["gains"]  / total["finished"] 
+    pct_gain = total["gains"]  / total["finished"]
     pct_loss = total["losses"] / total["finished"] 
     pct_no_change = no_pos_change /  total["finished"]
 
     finish_pos_cv = stdev(finish_positions) / avg_finish_position
     pts_volatility = stdev(per_race_pts_made)
 
+    points_share = total["pts"] / total["team_pts"]
+
+    # pit stops
+    cur.execute(
+        "SELECT pit.pit_stop_time_millis FROM race_data pit JOIN race on race.id = pit.race_id WHERE pit.type = 'PIT_STOP' and pit.driver_id = :id and race.year = :year",
+        {"id": driver_id, "year": year}
+    )
+
+    pit_times = []
+    problematic_pits = 0
+    avg_pit_time = 0
+
+    for row in cur.fetchall():
+        if not row[0]: continue
+        pit_times.append(row[0] / 1000)
+
+    if pit_times:
+        pit_times.sort()
+    
+        n = len(pit_times)
+        q1 = median_low(pit_times[:n//2])
+        q3 = median_high(pit_times[(n+1)//2:])
+        iqr = q3 - q1
+
+        slow_thresh = median(pit_times) + 1.5 * iqr
+        problematic_thresh = median(pit_times) + 3.0 * iqr
+
+        problematic_pits = sum(1 for t in pit_times if t > problematic_thresh)
+        avg_pit_time = mean(pit_times)
+
     print(f"\nSeason overview — {driver_id}, {year}")
     print("-" * 50)
-    print(f"Races: {total["races"]}  Finished: {total["finished"]}  Not finished/started: {not_finished} (rate: {not_finished_rate:.1%})\n")
+    print(f"Races: {total["races"]}  Finished: {total["finished"]}  Not finished/started: {not_finished}  (rate: {not_finished_rate:.1%})\n")
 
     print("Points")
     print(f"- Total pts: {total["pts"]} pts ({season_pts_pos} place)")
+    print(f"- Team pts share: {points_share:.2%}")
     print(f"- Avg pts / race: {pts_per_race:.2f} pts")
     print(f"- Avg pts when scoring: {avg_points_when_scoring:.2f} pts")
     print(f"- Points volatility (std): {pts_volatility:.2f} pts\n")
 
     print("Qualifying & starts")
     print(f"- Poles: {total["poles"]}  (Pole rate: {pole_rate:.1%})")
+    print(f"- Q1, Q2 eliminations: {total["q1_q2_elim"]} (rate: {q1_q2_elim_rate:.1%})")
     if total["q3"]:
         print(f"- Q3 appearances: {total["q3"]}")
         print(f"- Pole conversion (poles / Q3s): {pole_conversion:.1%}")
     print(f"- Avg grid position: {avg_grid_position:.2f}")
+    print(f"- Median grid position: {median_grid_position:.2f}")
+    print(f"- Most common grid position: {mode_grid_position:.2f}")
     print(f"- Penalties: {total["penalties"]}\n")
 
     print("Results & rates")
     print(f"- Wins: {total["wins"]}  (Win rate: {win_rate:.1%})")
     print(f"- Podiums: {total["podiums"]}  (Podium rate: {podium_rate:.1%})")
     print(f"- Scoring finishes: {total["score_finishes"]}  (Scoring rate: {scoring_rate:.1%})")
+    print(f"- Fastest laps: {total["fastest_laps"]}  (Fastest-lap rate: {fastest_lap_rate:.1%})")
     print(f"- Finish rate: {finish_rate:.1%}")
     print(f"- Avg finish position: {avg_finish_position:.2f}")
+    print(f"- Median finish position: {median_finish_position:.2f}")
+    print(f"- Most common finish position: {mode_finish_position:.2f}")
     print(f"- Finish position CV (coefficient of variation): {finish_pos_cv:.3f}\n")
 
+    print("Pit stops & strategy")
+    print(f"- Avg pit stops per race: {avg_race_pit_stops:.2f}")
+    print(f"- Avg pit stops time: {avg_pit_time:.2f}s")
+    print(f"- Problematic pit stops: {problematic_pits}\n")
+
     print("Not started/finished/classified, disqualified: ")
-    for nf, nf_info in nfs.items():
-        n, gps, reasons = nf_info
+    for nf in sorted(nfs, key=lambda k: nfs[k][0], reverse=True):
+        n, gps, reasons = nfs[nf]
         rate = n / total["races"]
         print(f"- {nf}: {n} ({rate:.1%})")
 
@@ -343,9 +401,6 @@ def driver_overview(driver_id: str, year: int):
     print(f"- Longest podium streak: {longest_pod_streak.get()}")
     print(f"- Longest win streak: {longest_win_streak.get()}")
     print(f"- Longest points streak: {longest_pts_streak.get()}\n")
-
-    print("Fastest laps")
-    print(f"- Fastest laps: {total["fastest_laps"]}  (Fastest-lap rate: {fastest_lap_rate:.1%})\n")
 
 def circuit(circuit_id: str, sql: str, rows=15, is_reversed=False):
     run_sql(sql, [circuit_id])
