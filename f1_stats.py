@@ -5,9 +5,29 @@ from lib.tables import print_table
 from statistics import mean, stdev
 from argparse import ArgumentParser
 from collections import defaultdict
+from typing import Callable
 
 from itertools import islice
 from os.path import join
+
+class Streak:
+    def __init__(self, condition: Callable[[int], bool]):
+        self.longest = 0
+        self.current = 0
+        self._is_continued = condition
+
+    def update(self, value: int):
+        if self._is_continued(value):
+            self.current += 1
+            return 
+
+        if self.current > self.longest:
+            self.longest = self.current
+        
+        self.current = 0
+    
+    def get(self) -> int:
+        return max(self.longest, self.current)
 
 ROOT_DIR = os.path.dirname(os.path.realpath(__file__))
 DATABASE_DIR = join(ROOT_DIR, "data", "f1db.db")
@@ -25,6 +45,9 @@ cur = conn.cursor()
 
 def ifnone(data: any, then: any):
     return data if data is not None else then
+
+def ifnot(data: any, then: any):
+    return data if data else then
 
 def run_sql(name: str, params=None):
     with open(join(SQL_SCRIPTS_DIR, name + ".sql")) as f:
@@ -162,15 +185,6 @@ def driver_pit_stops(driver_id: str, year: int):
         hide_delimiters=is_no_delims
     )
 
-
-def push_top2(top: dict, kind: str, val: int):
-    a, b = top[kind]
-
-    if val > a:
-        top[kind] = [val, a]
-    elif val > b:
-        top[kind][1] = val
-
 def driver_overview(driver_id: str, year: int):
     run_sql("driver-season-overview", {"id": driver_id, "year": year})
     fetched = cur.fetchall()
@@ -183,10 +197,6 @@ def driver_overview(driver_id: str, year: int):
     gains = 0
     losses = 0
 
-    # streaks
-    cws = cps = cpts = 0
-    lws = lps = lpts = 0
-
     q3_total = 0
     total_races = 0
     finished_races = 0
@@ -196,31 +206,41 @@ def driver_overview(driver_id: str, year: int):
     total_pts = 0
     total_fastest = 0
     total_poles = 0
-    total_penalties = 0 
+    total_penalties = 0
+
+    season_pts_pos = None
+
+    longest_win_streak = Streak(lambda x: x and x == 1)
+    longest_pod_streak = Streak(lambda x: x and x <= 3)
+    longest_pts_streak = Streak(lambda x: x and x <= 10)
 
     for gp, is_fastest, is_pole, q3, start, finish, gained, \
-        gap, laps, penalty, pts_after_race, pts_made in fetched:
+        gap, laps, penalty, pts_after_race, pts_made, pts_pos_after in fetched:
 
+        longest_win_streak.update(finish)
+        longest_pod_streak.update(finish)
+        longest_pts_streak.update(finish)
+
+        if start:
+            grid_postitions.append(start)
+        
         if start:
             grid_postitions.append(start)
         
         if gained:
             gained_positions.append(gained)            
 
+        if not start and finish:
+            start = finish + gained
+
+        if start:
+            grid_postitions.append(start)
+
         if penalty:
             total_penalties += 1
 
         if q3:
             q3_total += 1
-
-        if not finish:
-            lws, cws = max(lws, cws), 0
-            lps, cps = max(lps, cps), 0
-            lpts, cpts = max(lpts, cpts), 0
-        else:
-            cws = cws + 1 if finish == 1 else 0
-            cps = cps + 1 if finish <= 3 else 0
-            cpts = cpts + 1 if (pts_made or 0) > 0 else 0
 
         if finish:
             finish_positions.append(finish)
@@ -239,18 +259,15 @@ def driver_overview(driver_id: str, year: int):
 
             if finish <= 10:
                 score_finishes += 1
-            
+
         total_races += 1
         total_poles += ifnone(is_pole, 0)
         total_fastest += ifnone(is_fastest, 0)
         per_race_pts_made.append(ifnone(pts_made, 0))
         total_pts = pts_after_race
+        season_pts_pos = pts_pos_after
 
-    longest_win_streak = max(lws, cws)
-    longest_pod_streak = max(lps, cps)
-    longest_pts_streak = max(lpts, cpts)
-
-    pole_conversion = total_poles / q3_total
+    pole_conversion = total_poles / ifnot(q3_total, 1)
     finish_rate = finished_races / total_races
     pts_per_race = total_pts / total_races
 
@@ -283,7 +300,7 @@ def driver_overview(driver_id: str, year: int):
     print(f"Races: {total_races}  Finished: {finished_races}  DNFs: {dnfs}  DNF rate: {dnf_rate:.1%}\n")
 
     print("Points")
-    print(f"- Total pts: {total_pts} pts")
+    print(f"- Total pts: {total_pts} pts ({season_pts_pos} place)")
     print(f"- Avg pts / race: {pts_per_race:.2f} pts")
     print(f"- Avg pts when scoring: {avg_points_when_scoring:.2f} pts")
     print(f"- Points volatility (std): {pts_volatility:.2f} pts\n")
@@ -308,9 +325,9 @@ def driver_overview(driver_id: str, year: int):
     print(f"- % races net gain: {pct_gain:.1%}")
     print(f"- % races net loss: {pct_loss:.1%}")
     print(f"- % races no change: {pct_no_change:.1%}")
-    # print(f"- Longest podium streak: {longest_pod_streak}")
-    # print(f"- Longest win streak: {longest_win_streak}")
-    # print(f"- Longest points streak: {longest_pts_streak}\n")
+    print(f"- Longest podium streak: {longest_pod_streak.get()}")
+    print(f"- Longest win streak: {longest_win_streak.get()}")
+    print(f"- Longest points streak: {longest_pts_streak.get()}\n")
 
     print("Fastest laps")
     print(f"- Fastest laps: {total_fastest}  (Fastest-lap rate: {fastest_lap_rate:.1%})\n")
@@ -413,7 +430,7 @@ def season(year: int, is_constructor=False):
     for abbrev, name, finish_pos, points, is_pole, is_fastest, team, team_points in rows:
         drivers_results[name][abbrev] = finish_pos
         drivers_points[name] = points
-        teams_points[team] = team_points
+        teams_points[team] = ifnone(team_points, 0)
 
         if is_pole:
             drivers_results[name][abbrev] += SUP_P
@@ -495,6 +512,7 @@ def main(args: any):
                 execute_sql(args.sql)
 
             if args.update:
+                os.chdir(ROOT_DIR)
                 subprocess.run(
                     [join(ROOT_DIR, "install")], 
                     check=True

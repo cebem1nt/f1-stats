@@ -10,7 +10,8 @@ SELECT
     rd.race_laps,
     rd.race_time_penalty,
     rds.points,
-    rd.race_points
+    rd.race_points,
+    rds.position_number
 FROM 
     race_data rd
 JOIN 
