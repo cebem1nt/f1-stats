@@ -5,6 +5,8 @@ SELECT
     q.qualifying_q3_millis,
     rd.race_grid_position_number,
     rd.position_number,
+    rd.position_text,
+    rd.race_reason_retired,
     rd.race_positions_gained,
     rd.race_gap_millis,
     rd.race_laps,
