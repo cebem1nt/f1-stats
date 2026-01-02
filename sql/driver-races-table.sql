@@ -4,16 +4,16 @@ SELECT
     rd.race_reason_retired,
     constructor.name,
     race_driver_standing.positions_gained,
+    fl.fastest_lap_gap,
     grand_prix.name as '',
-    q.qualifying_q1 as q1,
-    q.qualifying_q2 as q2,
-    q.qualifying_q3 as q3,
     rd.race_grid_position_text as start,
     rd.position_text as finish,
     rd.race_positions_gained as gained,
     rd.race_gap as gap,
     rd.race_laps as laps, 
     rd.race_pit_stops as pits,
+    fl.fastest_lap_time 'best lap time',
+    fl.fastest_lap_lap 'best lap',
     race_driver_standing.position_text as pos,
     race_driver_standing.points as pts
 FROM 
@@ -24,13 +24,13 @@ JOIN
     constructor on constructor.id = rd.constructor_id
 JOIN
     grand_prix on grand_prix.id = race.grand_prix_id
-LEFT JOIN
-    race_data q on q.race_id = rd.race_id and
-    q.driver_id = :id and
-    q.type = 'QUALIFYING_RESULT'
+JOIN    
+    race_data fl on fl.race_id = race.id
+    and fl.driver_id = :id 
+    and fl.type = 'FASTEST_LAP'
 LEFT JOIN
     race_driver_standing on race_driver_standing.race_id = race.id
-    and race_driver_standing.driver_id = :id
+    and race_driver_standing.driver_id = :id    
 WHERE 
     rd.driver_id = :id and 
     rd.type = 'RACE_RESULT' and 

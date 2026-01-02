@@ -3,6 +3,7 @@ from statistics import mean, stdev, median, median_low, median_high, mode
 
 import sqlite3, os, subprocess
 from lib.tables import print_table
+from lib.emoji import gp_flags
 from argparse import ArgumentParser
 from collections import defaultdict
 from typing import Callable
@@ -38,6 +39,7 @@ SUP_P = "\u1D56"
 
 is_double_headers = False
 is_no_delims = False
+add_gp_flags = False
 adjustment = "left"
 
 conn = sqlite3.connect(DATABASE_DIR)
@@ -90,31 +92,39 @@ def execute_sql(file: str | None):
     finally:
         if is_tmp: os.remove(file)
 
-def driver_season_table(driver_id: str, year: int):
-    run_sql("driver-season-table", { "id": driver_id, "year": year })
+
+def driver_races_table(driver_id: str, year: int):
+    run_sql("driver-races-table", { "id": driver_id, "year": year })
 
     rows = cur.fetchall()
-    headers = [c[0] for c in cur.description[5:]]
+    headers = [c[0] for c in cur.description[6:]]
     out_rows = []
     comments = []
 
     teams_played = defaultdict(int)
-    FINISHED_COL = 5
+    FINISHED = 2
+    PTS_POS = -2
+    BEST_LAP_TIME = -4
 
-    for is_fastest, is_pole, reason_retired, team, pts_pos_gained, *row in rows:
+    for is_fastest, is_pole, reason_retired, team, \
+        pts_pos_gained, gap_from_fastest_lap, *row in rows:
+
         if reason_retired is not None:
             comments.append(f"* Retired because of - {reason_retired}")
-            row[FINISHED_COL] += '*'
+            row[FINISHED] += '*'
 
         if is_pole:
-            row[FINISHED_COL] += SUP_P
+            row[FINISHED] += SUP_P
 
         if is_fastest:
-            row[FINISHED_COL] += SUP_F
+            row[FINISHED] += SUP_F
 
         if pts_pos_gained:
             sign = '+' if pts_pos_gained > 0 else ''
-            row[-2] += f" ({sign}{pts_pos_gained})"
+            row[PTS_POS] += f" ({sign}{pts_pos_gained})"
+
+        if gap_from_fastest_lap:
+            row[BEST_LAP_TIME] += f" ({gap_from_fastest_lap})"
         
         out_rows.append(row)
         teams_played[team] += 1
@@ -365,7 +375,7 @@ def driver_overview(driver_id: str, year: int):
         print(f"- Pole conversion (poles / Q3s): {pole_conversion:.1%}")
     print(f"- Avg grid position: {avg_grid_position:.2f}")
     print(f"- Median grid position: {median_grid_position:.2f}")
-    print(f"- Most common grid position: {mode_grid_position:.2f}")
+    print(f"- Most common grid position: {mode_grid_position}")
     print(f"- Penalties: {total["penalties"]}\n")
 
     print("Results & rates")
@@ -376,7 +386,7 @@ def driver_overview(driver_id: str, year: int):
     print(f"- Finish rate: {finish_rate:.1%}")
     print(f"- Avg finish position: {avg_finish_position:.2f}")
     print(f"- Median finish position: {median_finish_position:.2f}")
-    print(f"- Most common finish position: {mode_finish_position:.2f}")
+    print(f"- Most common finish position: {mode_finish_position}")
     print(f"- Finish position CV (coefficient of variation): {finish_pos_cv:.3f}\n")
 
     print("Pit stops & strategy")
@@ -477,15 +487,20 @@ def search(part: str, table: str, column: str, overwrite_pattern=False):
 
 def season(year: int, is_constructor=False):
     cur.execute(
-        "SELECT grand_prix.abbreviation FROM grand_prix JOIN race on race.year = ? WHERE race.grand_prix_id = grand_prix.id"
+        "SELECT grand_prix.id, grand_prix.abbreviation FROM grand_prix JOIN race on race.year = ? WHERE race.grand_prix_id = grand_prix.id"
     , [year])
 
     grandprix_cols = []
     grandprix_template = {}
     out_rows = []
 
-    for col in cur.fetchall():
-        abbr = col[0]
+    if add_gp_flags:
+        flags = []
+
+    for gp, abbr in cur.fetchall():
+        if add_gp_flags:
+            flags.append(gp_flags[gp])
+
         grandprix_cols.append(abbr)
         grandprix_template[abbr] = None
 
@@ -529,6 +544,11 @@ def season(year: int, is_constructor=False):
             out_rows.append([pos, name] + per_races + [points])
             pos += 1
 
+    if add_gp_flags:
+        for i in range(len(grandprix_cols)):
+            abbr = grandprix_cols[i]
+            grandprix_cols[i] = f"{flags[i]} {abbr}"
+
     print_table(
         rows=out_rows,
         headers=["pos", "name"] + grandprix_cols + ["pts"],
@@ -541,7 +561,9 @@ def main(args: any):
     global is_double_headers
     global is_no_delims
     global adjustment
+    global add_gp_flags
 
+    add_gp_flags = args.gp_flags
     is_double_headers = args.double_headers
     is_no_delims = args.no_delimiters
     adjustment = args.adjustment
@@ -568,8 +590,8 @@ def main(args: any):
             season(args.year, args.constructor)
         
         case "driver":
-            if args.season:
-                driver_season_table(args.id, args.year)
+            if args.races:
+                driver_races_table(args.id, args.year)
             
             if args.pit_stops:
                 driver_pit_stops(args.id, args.year)
@@ -611,6 +633,7 @@ if __name__ == "__main__":
     p.add_argument("--double-headers", action="store_true", help="Print table headers twice (at the top and bottom)")
     p.add_argument("--no-delimiters", action="store_true", help="Do not print any separators for tables")
     p.add_argument("--adjustment", default="left", choices=("left", "center", "right"), help="Table text alignment")
+    p.add_argument("--gp-flags", action="store_true", help="Add emoji flags to grand prix")
 
     circuit_p = subps.add_parser("circuit", help="Get different records for a circuit")
     circuit_p.add_argument      ("id", metavar="ID", type=str, help="Circuit id")
@@ -624,9 +647,11 @@ if __name__ == "__main__":
     driver_p = subps.add_parser("driver", help="Different driver's statistics, data over the season")
     driver_p.add_argument      ("id", metavar="ID", type=str, help="Driver id")
     driver_p.add_argument      ("year", metavar="YEAR", type=str, help="Season year")
-    driver_p.add_argument      ("-s", "--season", action="store_true", help="Get a table of driver's races of season")
-    driver_p.add_argument      ("-o", "--overview", action="store_true", help="Get an overview, and driver statistics for a season")
+    driver_p.add_argument      ("-r", "--races", action="store_true", help="Get a table of driver's races of season")
+    driver_p.add_argument      ("-s", "--sprints", action="store_true", help="Get a table of driver's races of season")
+    driver_p.add_argument      ("-q", "--qualifying", action="store_true", help="Get a table of driver's races of season")
     driver_p.add_argument      ("-p", "--pit-stops", action="store_true", help="Get a table of pit stops for each race")
+    driver_p.add_argument      ("-o", "--overview", action="store_true", help="Get an overview, and driver statistics for a season")
     
     champ_p = subps.add_parser("season", help="Fancy wikipedia like season table for driver/constructor championship")
     champ_p.add_argument      ("year", metavar="YEAR", type=str, help="Season year")
