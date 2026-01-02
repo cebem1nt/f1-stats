@@ -105,26 +105,18 @@ Race progress
 
 ```sh
 # Circuit records
-python f1_stats.py circuit monza --best-lap
+python f1_stats.py circuit monza --best-lap --rows=5
 ```
 
-|    | year | driver             | finish | lap | time     | tyre        | engine     | constructor |
-|----|------|--------------------|--------|-----|----------|-------------|------------|-------------|
-| 1  | 2025 | Lando Norris       | 2      | 53  | 1:20.901 | pirelli     | mercedes   | mclaren     |
-| 2  | 2025 | Max Verstappen     | 1      | 52  | 1:21.003 | pirelli     | honda-rbpt | red-bull    |
-| 3  | 2004 | Rubens Barrichello | 1      | 41  | 1:21.046 | bridgestone | ferrari    | ferrari     |
-| 4  | 2025 | Oscar Piastri      | 3      | 47  | 1:21.245 | pirelli     | mercedes   | mclaren     |
-| 5  | 2025 | Charles Leclerc    | 4      | 53  | 1:21.294 | pirelli     | ferrari    | ferrari     |
-| 6  | 2004 | Michael Schumacher | 2      | 35  | 1:21.361 | bridgestone | ferrari    | ferrari     |
-| 7  | 2025 | Alexander Albon    | 7      | 53  | 1:21.368 | pirelli     | mercedes   | williams    |
-| 8  | 2024 | Lando Norris       | 3      | 53  | 1:21.432 | pirelli     | mercedes   | mclaren     |
-| 9  | 2005 | Kimi Räikkönen     | 4      | 51  | 1:21.504 | michelin    | mercedes   | mclaren     |
-| 10 | 2024 | Lewis Hamilton     | 5      | 53  | 1:21.512 | pirelli     | mercedes   | mercedes    |
-| 11 | 2025 | Lewis Hamilton     | 6      | 50  | 1:21.546 | pirelli     | ferrari    | ferrari     |
-| 12 | 2025 | Carlos Sainz Jr.   | 11     | 47  | 1:21.740 | pirelli     | mercedes   | williams    |
-| 13 | 2024 | Max Verstappen     | 6      | 43  | 1:21.745 | pirelli     | honda-rbpt | red-bull    |
-| 14 | 2019 | Lewis Hamilton     | 3      | 51  | 1:21.779 | pirelli     | mercedes   | mercedes    |
-| 15 | 2025 | George Russell     | 5      | 45  | 1:21.800 | pirelli     | mercedes   | mercedes    |
+```
+|   | year | driver             | finish | lap | time     | tyre        | engine     | constructor |
+|---|------|--------------------|--------|-----|----------|-------------|------------|-------------|
+| 1 | 2025 | Lando Norris       | 2      | 53  | 1:20.901 | pirelli     | mercedes   | mclaren     |
+| 2 | 2025 | Max Verstappen     | 1      | 52  | 1:21.003 | pirelli     | honda-rbpt | red-bull    |
+| 3 | 2004 | Rubens Barrichello | 1      | 41  | 1:21.046 | bridgestone | ferrari    | ferrari     |
+| 4 | 2025 | Oscar Piastri      | 3      | 47  | 1:21.245 | pirelli     | mercedes   | mclaren     |
+| 5 | 2025 | Charles Leclerc    | 4      | 53  | 1:21.294 | pirelli     | ferrari    | ferrari     |
+```
 
 ```sh
 # Constructor standings
