@@ -1,10 +1,10 @@
 # f1-stats
-A cli tool to fetch different statistics about formula 1 using [f1db]()
+A cli tool to fetch different statistics about formula 1 using [f1db](https://github.com/f1db/f1db)
 
 ## Features
 You can fetch plenty of different tables and statistics: 
 
-- Season tables (driver/constructor standings) in wikipedia like style
+- Season tables (driver/constructor standings) in [wikipedia like style](https://en.wikipedia.org/wiki/2025_Formula_One_World_Championship#World_Drivers'_Championship_standings)
 
 - Detailed info about season races, qualifications, pit stop times
 
