@@ -12,9 +12,10 @@ SELECT
     rd.race_gap as gap,
     rd.race_laps as laps, 
     rd.race_pit_stops as pits,
-    fl.fastest_lap_time 'best lap time',
-    fl.fastest_lap_lap 'best lap',
-    race_driver_standing.position_text as pos,
+    fl.fastest_lap_time as 'best lap time',
+    fl.fastest_lap_lap as 'best lap',
+    rd.race_time_penalty as penalty, 
+    race_driver_standing.position_text as 'pts pos',
     race_driver_standing.points as pts
 FROM 
     race_data rd

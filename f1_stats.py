@@ -104,7 +104,7 @@ def driver_races_table(driver_id: str, year: int):
     teams_played = defaultdict(int)
     FINISHED = 2
     PTS_POS = -2
-    BEST_LAP_TIME = -4
+    BEST_LAP_TIME = -5
 
     for is_fastest, is_pole, reason_retired, team, \
         pts_pos_gained, gap_from_fastest_lap, *row in rows:
@@ -147,7 +147,7 @@ def driver_races_table(driver_id: str, year: int):
     print('\n'.join(comments), end="\n\n")
 
 def driver_pit_stops(driver_id: str, year: int):
-    run_sql("driver-season-pits", {"id": driver_id, "year": year})
+    run_sql("driver-pits", {"id": driver_id, "year": year})
     fetched = cur.fetchall()
 
     races_pits = defaultdict(list)
@@ -186,7 +186,33 @@ def driver_pit_stops(driver_id: str, year: int):
 
     print_table(
         out_rows, 
-        [''] + headers + ["total"], 
+        [''] + headers + [''], 
+        double_headers=is_double_headers,
+        adjustment=adjustment,
+        hide_delimiters=is_no_delims
+    )
+
+def driver_qualifying(driver_id: str, year: int):
+    run_sql("driver-qualifying", {"id": driver_id, "year": year})
+    fetched = cur.fetchall()
+    headers = [c[0] for c in cur.description]
+
+    print_table(
+        fetched, 
+        headers, 
+        double_headers=is_double_headers,
+        adjustment=adjustment,
+        hide_delimiters=is_no_delims
+    )
+
+def driver_sprints(driver_id: str, year: int):
+    run_sql("driver-sprints", {"id": driver_id, "year": year})
+    fetched = cur.fetchall()
+    headers = [c[0] for c in cur.description]
+
+    print_table(
+        fetched, 
+        headers, 
         double_headers=is_double_headers,
         adjustment=adjustment,
         hide_delimiters=is_no_delims
@@ -304,7 +330,6 @@ def driver_overview(driver_id: str, year: int):
     not_finished_rate = not_finished / total["races"]
     q1_q2_elim_rate = total["q1_q2_elim"] / total["races"]
     
-    avg_per_race_pts = mean(per_race_pts_made)
     avg_finish_position = mean(finish_positions) 
     avg_grid_position = mean(grid_postitions)
     avg_gained_positions = mean(gained_positions)
@@ -363,7 +388,7 @@ def driver_overview(driver_id: str, year: int):
     print("Points")
     print(f"- Total pts: {total["pts"]} pts ({season_pts_pos} place)")
     print(f"- Team pts share: {points_share:.2%}")
-    print(f"- Avg pts / race: {pts_per_race:.2f} pts")
+    print(f"- Pts per race: {pts_per_race:.2f} pts")
     print(f"- Avg pts when scoring: {avg_points_when_scoring:.2f} pts")
     print(f"- Points volatility (std): {pts_volatility:.2f} pts\n")
 
@@ -456,11 +481,9 @@ def circuit_info(circuit_id: str, years_per_row=8):
 
     print()
     print(f"Direction: {direction.lower()}")        
-    print(f"Type: {circuit_type.lower()}")
-    print()
+    print(f"Type: {circuit_type.lower()}\n")
     print("Coordinates: ")
-    print(f"{lat},{lon}")
-    print()
+    print(f"{lat},{lon}\n")
 
 
 def search(part: str, table: str, column: str, overwrite_pattern=False):
@@ -599,6 +622,12 @@ def main(args: any):
             if args.overview:
                 driver_overview(args.id, args.year)
 
+            if args.qualifying:
+                driver_qualifying(args.id, args.year)
+
+            if args.sprints:
+                driver_sprints(args.id, args.year)
+
         case "db":
             if args.sql:
                 execute_sql(args.sql)
@@ -647,9 +676,9 @@ if __name__ == "__main__":
     driver_p = subps.add_parser("driver", help="Different driver's statistics, data over the season")
     driver_p.add_argument      ("id", metavar="ID", type=str, help="Driver id")
     driver_p.add_argument      ("year", metavar="YEAR", type=str, help="Season year")
-    driver_p.add_argument      ("-r", "--races", action="store_true", help="Get a table of driver's races of season")
-    driver_p.add_argument      ("-s", "--sprints", action="store_true", help="Get a table of driver's races of season")
-    driver_p.add_argument      ("-q", "--qualifying", action="store_true", help="Get a table of driver's races of season")
+    driver_p.add_argument      ("-r", "--races", action="store_true", help="Get a table of driver season races")
+    driver_p.add_argument      ("-s", "--sprints", action="store_true", help="Get a table of driver season sprints")
+    driver_p.add_argument      ("-q", "--qualifying", action="store_true", help="Get a table of driver qualifyings")
     driver_p.add_argument      ("-p", "--pit-stops", action="store_true", help="Get a table of pit stops for each race")
     driver_p.add_argument      ("-o", "--overview", action="store_true", help="Get an overview, and driver statistics for a season")
     
