@@ -120,7 +120,7 @@ python f1_stats.py circuit monza --best-lap --rows=5
 
 ```sh
 # You can also chain flags
-f1 driver max-verstappen 2025 --pit-stops --sprints
+python f1_stats.py driver max-verstappen 2025 --pit-stops --sprints
 ```
 ```
 |                | pit 1           | pit 2           | pit 3           | pit 4           | pit 5           |   |
