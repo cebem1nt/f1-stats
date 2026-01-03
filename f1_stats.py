@@ -1,38 +1,15 @@
 #!/usr/bin/env python3
 from statistics import mean, stdev, median, median_low, median_high, mode
+from typing import Any, Optional
+import os, subprocess
 
-import sqlite3, os, subprocess
 from lib.tables import print_table
 from lib.emoji import gp_flags
+from lib.classes import Streak, F1DB
+
 from argparse import ArgumentParser
 from collections import defaultdict
-from typing import Callable
-
 from itertools import islice
-from os.path import join
-
-class Streak:
-    def __init__(self, condition: Callable[[int], bool]):
-        self.longest = 0
-        self.current = 0
-        self._is_continued = condition
-
-    def update(self, value: int):
-        if self._is_continued(value):
-            self.current += 1
-            return 
-
-        if self.current > self.longest:
-            self.longest = self.current
-        
-        self.current = 0
-    
-    def get(self) -> int:
-        return max(self.longest, self.current)
-
-ROOT_DIR = os.path.dirname(os.path.realpath(__file__))
-DATABASE_DIR = join(ROOT_DIR, "data", "f1db.db")
-SQL_SCRIPTS_DIR = join(ROOT_DIR, "sql")
 
 SUP_F = "\u1DA0"
 SUP_P = "\u1D56"
@@ -42,41 +19,16 @@ is_no_delims = False
 add_gp_flags = False
 adjustment = "left"
 
-conn = sqlite3.connect(DATABASE_DIR)
-cur = conn.cursor()
+db = F1DB(
+    root_dir=os.path.dirname(os.path.realpath(__file__))
+)
 
 def ifnone(data: any, then: any):
     return data if data is not None else then
 
-def run_sql(name: str, params=None):
-    with open(join(SQL_SCRIPTS_DIR, name + ".sql")) as f:
-        sql = f.read()
-
-    if params:
-        cur.execute(sql, params)
-    else:
-        cur.execute(sql)
-
-def execute_sql(file: str | None):
-    is_tmp = False
-
-    if file is None:
-        file = "tmp.sql"
-        os.system(f"{os.getenv("EDITOR", "nano")} {file}")
-        
-        if not os.path.exists(file):
-            return
-
-        is_tmp = True
-
+def execute_sql(file: Optional[str]):
     try:
-        content = None
-        with open(file) as f:
-            content = f.read()
-        
-        cur.execute(content)
-        fetched = cur.fetchall()
-        headers = [c[0] for c in cur.description]
+        fetched, headers = db.run_file(file)
         
         print_table(
             fetched, 
@@ -87,17 +39,16 @@ def execute_sql(file: str | None):
         )
 
     except FileNotFoundError:
-        return print(f"File \"{file}\" does not exist")
-
-    finally:
-        if is_tmp: os.remove(file)
+        return print(f'File "{file}" does not exist')
 
 
 def driver_races_table(driver_id: str, year: int):
-    run_sql("driver-races-table", { "id": driver_id, "year": year })
+    rows = db.run_script(
+        "driver-races-table", 
+        { "id": driver_id, "year": year }
+    )
 
-    rows = cur.fetchall()
-    headers = [c[0] for c in cur.description[6:]]
+    headers = [c[0] for c in db.cur.description[6:]]
     out_rows = []
     comments = []
 
@@ -147,13 +98,15 @@ def driver_races_table(driver_id: str, year: int):
     print('\n'.join(comments), end="\n\n")
 
 def driver_pit_stops(driver_id: str, year: int):
-    run_sql("driver-pits", {"id": driver_id, "year": year})
-    fetched = cur.fetchall()
+    rows = db.run_script(
+        "driver-pits", 
+        {"id": driver_id, "year": year}
+    )
 
     races_pits = defaultdict(list)
     most_pits = -1
 
-    for race, lap, time in fetched:
+    for race, lap, time in rows:
         pit = {
             "lap": lap,
             "time": time
@@ -193,12 +146,14 @@ def driver_pit_stops(driver_id: str, year: int):
     )
 
 def driver_qualifying(driver_id: str, year: int):
-    run_sql("driver-qualifying", {"id": driver_id, "year": year})
-    fetched = cur.fetchall()
-    headers = [c[0] for c in cur.description]
+    rows = db.run_script(
+        "driver-qualifying", 
+        {"id": driver_id, "year": year}
+    )
+    headers = [c[0] for c in db.cur.description]
 
     print_table(
-        fetched, 
+        rows, 
         headers, 
         double_headers=is_double_headers,
         adjustment=adjustment,
@@ -206,12 +161,14 @@ def driver_qualifying(driver_id: str, year: int):
     )
 
 def driver_sprints(driver_id: str, year: int):
-    run_sql("driver-sprints", {"id": driver_id, "year": year})
-    fetched = cur.fetchall()
-    headers = [c[0] for c in cur.description]
+    rows = db.run_script(
+        "driver-sprints", 
+        {"id": driver_id, "year": year}
+    )
+    headers = [c[0] for c in db.cur.description]
 
     print_table(
-        fetched, 
+        rows, 
         headers, 
         double_headers=is_double_headers,
         adjustment=adjustment,
@@ -219,10 +176,12 @@ def driver_sprints(driver_id: str, year: int):
     )
 
 def driver_overview(driver_id: str, year: int):
-    run_sql("driver-season-overview", {"id": driver_id, "year": year})
-    fetched = cur.fetchall()
+    rows = db.run_script(
+        "driver-season-overview", 
+        {"id": driver_id, "year": year}
+    )
     
-    if not fetched:
+    if not rows:
         return print("Couldn't find anything")
 
     per_race_pts_made = []
@@ -262,7 +221,7 @@ def driver_overview(driver_id: str, year: int):
     longest_pts_streak = Streak(lambda x: x and x <= 10)
 
     for gp, is_fastest, is_pole, q3, pits, start, finish, finish_text, reason_retired, gained,\
-        gap, laps, penalty, pts_after_race, pts_made, pts_pos_after, team_pts_after_race in fetched:
+        gap, laps, penalty, pts_after_race, pts_made, pts_pos_after, team_pts_after_race in rows:
 
         longest_win_streak.update(finish)
         longest_pod_streak.update(finish)
@@ -354,16 +313,24 @@ def driver_overview(driver_id: str, year: int):
     points_share = total["pts"] / total["team_pts"]
 
     # pit stops
-    cur.execute(
-        "SELECT pit.pit_stop_time_millis FROM race_data pit JOIN race on race.id = pit.race_id WHERE pit.type = 'PIT_STOP' and pit.driver_id = :id and race.year = :year",
-        {"id": driver_id, "year": year}
-    )
+    sql = """
+        SELECT 
+            pit.pit_stop_time_millis 
+        FROM race_data pit 
+        JOIN race on race.id = pit.race_id 
+        WHERE 
+            pit.type = 'PIT_STOP' 
+            and pit.driver_id = :id 
+            and race.year = :year
+    """
+
+    rows = db.execute(sql,{"id": driver_id, "year": year})
 
     pit_times = []
     problematic_pits = 0
     avg_pit_time = 0
 
-    for row in cur.fetchall():
+    for row in rows:
         if not row[0]: continue
         pit_times.append(row[0] / 1000)
 
@@ -438,9 +405,11 @@ def driver_overview(driver_id: str, year: int):
     print(f"- Longest points streak: {longest_pts_streak.get()}\n")
 
 def circuit(circuit_id: str, sql: str, rows=15, is_reversed=False):
-    run_sql(sql, [circuit_id])
-    fetched = cur.fetchall() if rows == -1 else cur.fetchmany(rows)
-    headers = [c[0] for c in cur.description]
+    fetched = db.run_script(sql, [circuit_id])
+    headers = [c[0] for c in db.cur.description]
+
+    if rows != -1:
+        fetched = fetched[:rows]
 
     if is_reversed:
         fetched.reverse()
@@ -454,11 +423,15 @@ def circuit(circuit_id: str, sql: str, rows=15, is_reversed=False):
     )
 
 def circuit_info(circuit_id: str, years_per_row=8):
-    cur.execute(
-        "SELECT circuit.*, GROUP_CONCAT(race.year ,',') as years FROM circuit JOIN race on race.circuit_id = :id WHERE circuit.id = :id"
-    , {"id": circuit_id})
-
-    fetched = cur.fetchone()
+    sql = """
+        SELECT 
+            circuit.*, 
+            GROUP_CONCAT(race.year ,',') as years 
+        FROM circuit 
+        JOIN race on race.circuit_id = :id 
+        WHERE circuit.id = :id
+    """
+    fetched = db.execute(sql, {"id": circuit_id})[0]
 
     if not fetched or fetched[0] is None:
         return print(f"Circuit: \"{circuit_id}\" was not found")
@@ -489,15 +462,14 @@ def circuit_info(circuit_id: str, years_per_row=8):
 def search(part: str, table: str, column: str, overwrite_pattern=False):
     pattern = part if overwrite_pattern else f"%{part}%"
 
-    cur.execute(
+    fetched = db.execute(
         f"SELECT * FROM {table} WHERE {table}.{column} LIKE ?"
     , [pattern])
 
-    fetched = cur.fetchall()
     headers = []
     name_index = 0
 
-    for i, c in enumerate(cur.description):
+    for i, c in enumerate(db.cur.description):
         headers.append(c[0])
         if c[0] == "name": 
             name_index = i
@@ -509,9 +481,16 @@ def search(part: str, table: str, column: str, overwrite_pattern=False):
             print(f"{headers[i]}: {found[i]}")
 
 def season(year: int, is_constructor=False):
-    cur.execute(
-        "SELECT grand_prix.id, grand_prix.abbreviation FROM grand_prix JOIN race on race.year = ? WHERE race.grand_prix_id = grand_prix.id"
-    , [year])
+    sql = """
+        SELECT 
+            grand_prix.id, 
+            grand_prix.abbreviation 
+        FROM grand_prix 
+        JOIN race on race.year = ? 
+        WHERE race.grand_prix_id = grand_prix.id
+    """
+
+    rows = db.execute(sql, [year])
 
     grandprix_cols = []
     grandprix_template = {}
@@ -520,15 +499,14 @@ def season(year: int, is_constructor=False):
     if add_gp_flags:
         flags = []
 
-    for gp, abbr in cur.fetchall():
+    for gp, abbr in rows:
         if add_gp_flags:
             flags.append(gp_flags[gp])
 
         grandprix_cols.append(abbr)
         grandprix_template[abbr] = None
 
-    run_sql("championship", {"year": year})
-    rows = cur.fetchall()
+    rows = db.run_script("championship", {"year": year})
 
     drivers_results = defaultdict(lambda: dict(grandprix_template))
     teams_drivers = defaultdict(dict)
@@ -580,7 +558,7 @@ def season(year: int, is_constructor=False):
         hide_delimiters=is_no_delims
     )
 
-def main(args: any):
+def main(args: Any):
     global is_double_headers
     global is_no_delims
     global adjustment
@@ -633,11 +611,7 @@ def main(args: any):
                 execute_sql(args.sql)
 
             if args.update:
-                os.chdir(ROOT_DIR)
-                subprocess.run(
-                    [join(ROOT_DIR, "install")], 
-                    check=True
-                )
+                db.update()
 
         case "search":
             if args.driver:
@@ -696,7 +670,7 @@ if __name__ == "__main__":
     search_p.add_argument      ("-col","--column", type=str,  default="name",      help="Colum to match part, defaults to \"name\"")
 
     db_p = subps.add_parser("db", help="Different database related commands")
-    db_p.add_argument      ("-s", "--sql", type=str, nargs='?', help="Run arbitrary sql on the f1db")
+    db_p.add_argument      ("-s", "--sql", type=str, help="Run arbitrary sql on the f1db")
     db_p.add_argument      ("-u", "--update", action="store_true", help="Update/init f1db")
 
     args = p.parse_args()
