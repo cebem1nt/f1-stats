@@ -25,8 +25,8 @@ JOIN
     constructor on constructor.id = rd.constructor_id
 JOIN
     grand_prix on grand_prix.id = race.grand_prix_id
-JOIN    
-    race_data fl on fl.race_id = race.id
+LEFT JOIN    
+    race_data fl on fl.race_id = rd.race_id
     and fl.driver_id = :id 
     and fl.type = 'FASTEST_LAP'
 LEFT JOIN
