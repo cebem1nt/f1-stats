@@ -120,8 +120,9 @@ python f1_stats.py circuit monza --best-lap --rows=5
 
 ```sh
 # You can also chain flags
-f1 driver max-verstappen 2025 --pit-stops --sprints
-
+python f1_stats.py driver max-verstappen 2025 --pit-stops --sprints
+```
+```
 |                | pit 1           | pit 2           | pit 3           | pit 4           | pit 5           |   |
 |----------------|-----------------|-----------------|-----------------|-----------------|-----------------|---|
 | Australia      | lap 2 - 13.416  | lap 3 - 13.740  | lap 4 - 12.938  | lap 34 - 18.700 | lap 46 - 18.721 | 5 |
