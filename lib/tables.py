@@ -1,4 +1,8 @@
-def to_str(item: any, show_nones=False):
+from typing import Literal, Any
+
+Adjustment = Literal["left", "right", "center"]
+
+def to_str(item: Any, show_nones=False):
     if item is None:
         if show_nones:
             return "None"
@@ -10,7 +14,7 @@ def to_str(item: any, show_nones=False):
 def adjust(
     item: str, 
     width: int,
-    direction="left", 
+    direction: Adjustment, 
 ):
     if direction == "left":
         return item.ljust(width)
@@ -48,7 +52,7 @@ def print_headers(
         print(med_separator + sep)
 
 def print_rows(
-    rows: list[any],
+    rows: list[Any],
     widths: list[int],
     adjustment: str,
     show_nones=False,
@@ -66,9 +70,9 @@ def print_rows(
         line = ""
 
 def print_table(
-    rows: list[any],
+    rows: list[Any],
     headers: list[str],
-    adjustment="left",
+    adjustment: Adjustment = "left",
     hide_delimiters=False,
     double_headers=False,
     show_nones=False
@@ -93,3 +97,36 @@ def print_table(
         print_headers(headers, widths, adjustment, show_nones, True, hide_delimiters)
     
     print()
+
+class Table:
+    def __init__(
+        self, 
+        adjustment: Adjustment,
+        double_headers: bool,
+        hide_delimiters: bool,
+        show_nones=False
+    ):
+        self.double_headers = double_headers
+        self.hide_delimiters = hide_delimiters
+        self.adjustment = adjustment
+        self.show_nones = show_nones
+        self.rows = []
+        self.headers = []
+
+    def print(self):
+        print_table(
+            self.rows, 
+            self.headers,
+            self.adjustment,
+            self.hide_delimiters,
+            self.double_headers,
+            self.show_nones
+        )
+
+    def flush(self):
+        self.print()
+        self.rows = []
+        self.headers = []
+
+    def add_row(self, row: list[Any]):
+        self.rows.append(row)
