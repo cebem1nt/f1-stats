@@ -6,8 +6,8 @@ from statistics import mean, stdev, median, median_low, median_high, mode
 from collections import defaultdict
 from itertools import islice
 
+from lib.helpers import strsign, annotate_pf, ifnone, separator, print_comments
 from lib.tables import Table
-from lib.helpers import strsign, annotate_pf, ifnone
 from lib.emoji import gp_flags
 
 class Streak:
@@ -76,30 +76,48 @@ class F1DB:
     def get_columns(self, start=0) -> list[Any]:
         return [c[0] for c in self.cur.description[start:]] 
 
+class Base:
+    def __init__(
+        self,
+        db_handler: F1DB,
+        out_table: Table
+    ):
+        self.db = db_handler
+        self.table = out_table
 
-class GP:
-    race_sql = "gp-race"
-    
+    def flush_script(self, script: str) -> bool:
+        rows = self.db.run_script(
+            script, {"id": self.id, "year": self.year}
+        )
+
+        if not rows:
+            return False
+
+        self.table.rows = rows
+        self.table.headers = self.db.get_columns()
+        self.table.flush()
+        return True
+
+class GP(Base):    
     def __init__(
         self,
         id: str, 
         year: int,
-        db_handler: F1DB,
-        out_table: Table
+        db: F1DB,
+        table: Table
     ):
+        super().__init__(db, table)
         self.id = id
         self.year = year
-        self.db = db_handler
-        self.table = out_table
 
     def race(self):
         rows = self.db.run_script(
-            self.race_sql, 
-            {"id": self.id, "year": self.year}
+            "gp-race", {"id": self.id, "year": self.year}
         )
 
         self.table.headers = self.db.get_columns(6)
         comments = []
+        dnfs_comments = []
 
         for is_fastest, is_pole, reason_retired, pts_pos_gained, \
             fastest_lap_gap, pos_gained, *row in rows:
@@ -124,36 +142,63 @@ class GP:
                 row[-5] += f" ({fastest_lap_gap})"
 
             if reason_retired is not None:
-                comments.append(f"{driver} - Reason retired: {reason_retired}")
+                dnfs_comments.append(f"{driver} - Reason retired: {reason_retired}")
 
             self.table.add_row(row)
     
         self.table.flush()
-        print('\n'.join(comments), end="\n\n")
+        print_comments(comments)
+        
+        if dnfs_comments:
+            print(separator())
+            print_comments(dnfs_comments)
 
-class Driver:
-    races_sql = "driver-races" 
-    pits_sql = "driver-pits"
-    qualifying_sql = "driver-qualifying"
-    sprints_sql = "driver-sprints"
-    overview_sql = "driver-season-overview"
+    def sprint(self):
+        rows = self.db.run_script(
+            "gp-sprint", {"id": self.id, "year": self.year}
+        )
 
+        self.table.headers = self.db.get_columns(2)
+        comments = []
+
+        if not rows:
+            return print(f"No sprint found: {self.id} - {self.year}")
+
+        for pos_gained, reason_retired, *row in rows:
+            
+            if pos_gained:
+                row[3] += f" ({strsign(pos_gained)})"
+
+            if reason_retired is not None:
+                comments.append(f"{row[0]} - Reason retired: {reason_retired}")
+
+            self.table.add_row(row)
+
+        self.table.flush()
+        print_comments(comments)
+
+    def sprint_qualifying(self):
+        if not self.flush_script("gp-sprint-qualifying"):
+            print(f"No sprint found: {self.id} - {self.year}")
+
+    def race_qualifying(self):
+        self.flush_script("gp-race-qualifying")
+
+class Driver(Base):
     def __init__(
         self,
         id: str, 
         year: int,
-        db_handler: F1DB,
-        out_table: Table
+        db: F1DB,
+        table: Table
     ):
+        super().__init__(db, table)
         self.id = id
         self.year = year
-        self.db = db_handler
-        self.table = out_table
 
     def races(self):
         rows = self.db.run_script(
-            self.races_sql,
-            { "id": self.id, "year": self.year }
+            "driver-races", { "id": self.id, "year": self.year }
         )
 
         self.table.headers = self.db.get_columns(6)
@@ -180,7 +225,7 @@ class Driver:
             self.table.add_row(row)
             teams_played[team] += 1
 
-        comments.append('-' * 40)
+        comments.append(separator())
 
         for team, total in teams_played.items():
             if len(teams_played) == 1:
@@ -189,12 +234,11 @@ class Driver:
                 comments.append(f"{total} games played in {team}")
 
         self.table.flush()
-        print('\n'.join(comments), end="\n\n")
+        print_comments(comments)
 
     def pits(self):
         rows = self.db.run_script(
-            self.pits_sql, 
-            {"id": self.id, "year": self.year}
+            "driver-pits", {"id": self.id, "year": self.year}
         )
 
         races_pits = defaultdict(list)
@@ -232,24 +276,15 @@ class Driver:
         
         self.table.flush()
 
-    def __flush_script(self, script: str):
-        self.table.rows = self.db.run_script(
-            script, {"id": self.id, "year": self.year}
-        )
-
-        self.table.headers = self.db.get_columns()
-        self.table.flush()
-
     def qualifying(self):
-        self.__flush_script(self.qualifying_sql)
+        self.flush_script("driver-qualifying")
 
     def sprints(self):
-        self.__flush_script(self.sprints_sql)
+        self.flush_script("driver-sprints")
 
     def overview(self):
         rows = self.db.run_script(
-            self.overview_sql,
-            {"id": self.id, "year": self.year}
+           "driver-season-overview", {"id": self.id, "year": self.year}
         )
     
         if not rows:

@@ -18,3 +18,8 @@ def annotate_pf(data: Any, is_pole: bool, is_fastest: bool):
         addif(data, is_pole, SUP_P)
     , is_fastest, SUP_F)
     
+def separator():
+    return '-' * 50
+
+def print_comments(comments: list[str]):
+    print('\n'.join(comments), end="\n\n")
