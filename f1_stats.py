@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 import os, argparse
 
-from argparse import ArgumentParser
 from typing import Any, Optional
-from lib.tables import print_table, Table
+from lib.tables import Table
 from lib.classes import (
     Streak, 
     F1DB, 
@@ -14,15 +13,15 @@ from lib.classes import (
     Circuit
 )
 
-f1db = F1DB(
-    root_dir=os.path.dirname(os.path.realpath(__file__))
-)
-
-def main(args: Any):
+def main(args: argparse.Namespace):
     table = Table(
         args.adjustment,
         args.double_headers,
         args.no_delimiters
+    )
+
+    f1db = F1DB(
+        root_dir=os.path.dirname(os.path.realpath(__file__))
     ) 
 
     match args.command:
@@ -82,24 +81,28 @@ def main(args: Any):
                 db.update()
 
             if args.search:
+                queries = []
+
                 if args.driver:
-                    table = "driver"
-                elif args.constructor:
-                    table = "constructor"
-                elif args.circuit:
-                    table = "circuit"
-                elif args.grand_prix:
-                    table = "grand_prix"
-                else:
-                    return print("I don't know what table to search for...")
+                    queries.append((args.driver, "driver"))
+
+                if args.constructor:
+                    queries.append((args.constructor, "constructor"))
+
+                if args.circuit:
+                    queries.append((args.circuit, "circuit"))
+
+                if args.grand_prix:
+                    queries.append((args.grand_prix, "grand_prix"))
             
-                db.search(args.search, table, args.column, args.overwrite_pattern)
+                for query, table in queries:
+                    db.search(query, table, args.column, args.pattern)
             
         case _:
             print(f"Unknown command: {args.command}")
 
 if __name__ == "__main__":
-    p = ArgumentParser(description="Diferrent charts, statistics, records, all time bests of Formula One")
+    p = argparse.ArgumentParser(description="Diferrent charts, statistics, records, all time bests of Formula One")
 
     subps = p.add_subparsers(dest="command", help="Available commands")
     p.add_argument("--double-headers", action="store_true", help="Print table headers twice (at the top and bottom)")
@@ -139,15 +142,15 @@ if __name__ == "__main__":
 
 
     db_p = subps.add_parser("db",  help="Different database related commands")
-    db_p.add_argument      ("-S",  "--search", type=str,  help="Search by given part")
-    db_p.add_argument      ("-d",  "--driver",            action="store_true", help="If searching, search for driver")
-    db_p.add_argument      ("-c",  "--constructor",       action="store_true", help="If searching, search for a constructor (team)")
-    db_p.add_argument      ("-C",  "--circuit",           action="store_true", help="If searching, search for circuit")
-    db_p.add_argument      ("-gp", "--grand-prix",        action="store_true", help="If searching, search for grand prix")
-    db_p.add_argument      ("-op", "--overwrite-pattern", action="store_true", help="If searching, treat part as entire pattern for sql LIKE when searching")
-    db_p.add_argument      ("-col","--column",  type=str, default="name",      help="If searching, use given colum to match part, defaults to \"name\"")
-    db_p.add_argument      ("-s",  "--sql",     type=str,                      help="Run arbitrary sql on the f1db")
-    db_p.add_argument      ("-u",  "--update",  action="store_true",           help="Update/init f1db")
+    db_p.add_argument      ("-s",  "--sql",          type=str,              help="Run arbitrary sql on the f1db")
+    db_p.add_argument      ("-u",  "--update",       action="store_true",   help="Update/init f1db")
+    db_p.add_argument      ("-S",  "--search",       action="store_true",   help="Search by given part")
+    db_p.add_argument      ("-d",  "--driver",       type=str,              help="If searching, search for driver")
+    db_p.add_argument      ("-t",  "--constructor",  type=str,              help="If searching, search for a constructor (team)")
+    db_p.add_argument      ("-c",  "--circuit",      type=str,              help="If searching, search for circuit")
+    db_p.add_argument      ("-g",  "--grand-prix",   type=str,              help="If searching, search for grand prix")
+    db_p.add_argument      ("--pattern",             type=str,              help="If searching, treat part as entire pattern for sql LIKE when searching")
+    db_p.add_argument      ("--column",  type=str,   default="name",        help="If searching, use given colum to match part, defaults to \"name\"")
 
     args = p.parse_args()
 
