@@ -488,7 +488,7 @@ class Season:
         self.db = db_handler
         self.table = out_table
 
-    def standing(self, is_constructor=False):
+    def championship(self, is_constructor=False):
         sql = """
             SELECT 
                 grand_prix.id, 
@@ -553,3 +553,116 @@ class Season:
 
         self.table.headers = ["pos", "name"] + grandprix_cols + ["pts"]
         self.table.flush()
+
+class Circuit:
+    def __init__(
+        self, 
+        id: str,
+        rows: int,
+        is_reversed: bool,
+        db_handler: F1DB,
+        out_table: Table
+    ):
+        self.id = id
+        self.db = db_handler
+        self.table = out_table
+        self.rows = rows
+        self.is_reversed = is_reversed
+
+    def record(
+        self, 
+        script: str
+    ):
+        fetched = self.db.run_script(script, [self.id])
+        if self.rows != -1:
+            fetched = fetched[:self.rows]
+
+        if self.is_reversed:
+            fetched.reverse()
+
+        self.table.headers = self.db.get_columns()
+        self.table.rows = fetched
+        self.table.flush()
+
+    def info(self, years_per_row=8):
+        sql = """
+            SELECT 
+                circuit.*, 
+                GROUP_CONCAT(race.year ,',') as years 
+            FROM circuit 
+            JOIN race on race.circuit_id = :id 
+            WHERE circuit.id = :id
+        """
+        fetched = self.db.execute(sql, {"id": self.id})[0]
+
+        if not fetched or fetched[0] is None:
+            return print(f"Circuit: \"{self.id}\" was not found")
+
+        _, name, full_name, prev_names, circuit_type, direction, \
+        place, country_id, lat, lon, length, turns, total_races, races_years = fetched
+
+        print()
+        print(f"* {name} ({full_name})")
+        print(f"At: {country_id} - {place}")
+        print(f"Lenght: {length}km, turns: {turns}")
+        print(f"Total races held: {total_races}")
+        years = races_years.split(',')
+
+        for i in range(0, len(years), years_per_row):
+            print('\t' + ','.join(years[i:i+years_per_row]))
+
+        if prev_names:
+            print(f"Previous names: \n\t{prev_names}")
+
+        print()
+        print(f"Direction: {direction.lower()}")        
+        print(f"Type: {circuit_type.lower()}\n")
+        print("Coordinates: ")
+        print(f"{lat},{lon}\n")
+
+class DB:
+    def __init__(
+        self, 
+        db_handler: F1DB,
+        out_table: Table
+    ):
+        self.db = db_handler
+        self.table = out_table
+
+    def update(self):
+        self.db.update()
+
+    def execute_sql(self, file: str):
+        try:
+            self.table.rows, self.table.headers = self.db.run_file(file)
+            self.table.flush()
+
+        except FileNotFoundError:
+            return print(f'File "{file}" does not exist')
+    
+    def search(
+        self, 
+        part: str, 
+        table: str, 
+        column: str,
+        overwrite_pattern=False
+    ):
+        pattern = part if overwrite_pattern else f"%{part}%"
+
+        fetched = self.db.execute(
+            f"SELECT * FROM {table} WHERE {table}.{column} LIKE ?"
+        , [pattern])
+
+        headers = []
+        name_index = 0
+
+        for i, c in enumerate(self.db.cur.description):
+            headers.append(c[0])
+            if c[0] == "name": 
+                name_index = i
+
+        for found in fetched:
+            print(f"\n---- Found: {found[name_index]} ----\n")
+
+            for i in range(len(headers)):
+                print(f"{headers[i]}: {found[i]}")

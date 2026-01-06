@@ -7,105 +7,16 @@ from lib.tables import print_table, Table
 from lib.classes import (
     Streak, 
     F1DB, 
-    GP, 
+    GP,
+    DB,
     Driver, 
-    Season
+    Season,
+    Circuit
 )
 
-db = F1DB(
+f1db = F1DB(
     root_dir=os.path.dirname(os.path.realpath(__file__))
 )
-
-def execute_sql(file: Optional[str]):
-    try:
-        fetched, headers = db.run_file(file)
-        
-        print_table(
-            fetched, 
-            headers,        
-            double_headers=is_double_headers,
-            adjustment=adjustment,
-            hide_delimiters=is_no_delims
-        )
-
-    except FileNotFoundError:
-        return print(f'File "{file}" does not exist')
-   
-def circuit(circuit_id: str, sql: str, rows=15, is_reversed=False):
-    fetched = db.run_script(sql, [circuit_id])
-    headers = [c[0] for c in db.cur.description]
-
-    if rows != -1:
-        fetched = fetched[:rows]
-
-    if is_reversed:
-        fetched.reverse()
-
-    print_table(
-        fetched, 
-        headers, 
-        double_headers=is_double_headers,
-        adjustment=adjustment,
-        hide_delimiters=is_no_delims
-    )
-
-def circuit_info(circuit_id: str, years_per_row=8):
-    sql = """
-        SELECT 
-            circuit.*, 
-            GROUP_CONCAT(race.year ,',') as years 
-        FROM circuit 
-        JOIN race on race.circuit_id = :id 
-        WHERE circuit.id = :id
-    """
-    fetched = db.execute(sql, {"id": circuit_id})[0]
-
-    if not fetched or fetched[0] is None:
-        return print(f"Circuit: \"{circuit_id}\" was not found")
-
-    _, name, full_name, prev_names, circuit_type, direction, \
-    place, country_id, lat, lon, length, turns, total_races, races_years = fetched
-
-    print()
-    print(f"* {name} ({full_name})")
-    print(f"At: {country_id} - {place}")
-    print(f"Lenght: {length}km, turns: {turns}")
-    print(f"Total races held: {total_races}")
-    years = races_years.split(',')
-
-    for i in range(0, len(years), years_per_row):
-        print('\t' + ','.join(years[i:i+years_per_row]))
-
-    if prev_names:
-        print(f"Previous names: \n\t{prev_names}")
-
-    print()
-    print(f"Direction: {direction.lower()}")        
-    print(f"Type: {circuit_type.lower()}\n")
-    print("Coordinates: ")
-    print(f"{lat},{lon}\n")
-
-
-def search(part: str, table: str, column: str, overwrite_pattern=False):
-    pattern = part if overwrite_pattern else f"%{part}%"
-
-    fetched = db.execute(
-        f"SELECT * FROM {table} WHERE {table}.{column} LIKE ?"
-    , [pattern])
-
-    headers = []
-    name_index = 0
-
-    for i, c in enumerate(db.cur.description):
-        headers.append(c[0])
-        if c[0] == "name": 
-            name_index = i
-
-    for found in fetched:
-        print(f"\n---- Found: {found[name_index]} ----\n")
-
-        for i in range(len(headers)):
-            print(f"{headers[i]}: {found[i]}")
 
 def main(args: Any):
     table = Table(
@@ -116,28 +27,29 @@ def main(args: Any):
 
     match args.command:
         case "circuit":
-            if not args.best_lap and not args.best_qualifying and \
-                not args.most_wins and not args.most_podiums:
-                circuit_info(args.id)
+            circuit = Circuit(args.id, args.rows, args.reverse, f1db, table)
+
+            if args.info:
+                circuit.info()
 
             if args.best_lap:
-                circuit(args.id, "best-lap", args.rows, args.reverse)
+                circuit.record("best-lap")
 
             if args.best_qualifying:
-                circuit(args.id, "best-qualifying", args.rows, args.reverse)
+                circuit.record("best-qualifying")
 
             if args.most_wins:
-                circuit(args.id, "most-wins", args.rows, args.reverse)
+                circuit.record("most-wins")
 
             if args.most_podiums:
-                circuit(args.id, "most-podiums", args.rows, args.reverse)
+                circuit.record("most-podiums")
         
         case "season":
-            season = Season(args.year, args.gp_flags, db, table)
-            season.standing(args.constructor)
+            season = Season(args.year, args.gp_flags, f1db, table)
+            season.championship(args.constructor)
 
         case "driver":
-            driver = Driver(args.id, args.year, db, table)
+            driver = Driver(args.id, args.year, f1db, table)
 
             if args.races:
                 driver.races()
@@ -154,32 +66,35 @@ def main(args: Any):
             if args.sprints:
                 driver.sprints()
 
-        case "db":
-            if args.sql:
-                execute_sql(args.sql)
-
-            if args.update:
-                db.update()
-
         case "gp":
-            gp = GP(args.id, args.year, db, table)
+            gp = GP(args.id, args.year, f1db, table)
 
             if args.race:
                 gp.race()
 
-        case "search":
-            if args.driver:
-                table = "driver"
-            elif args.constructor:
-                table = "constructor"
-            elif args.circuit:
-                table = "circuit"
-            elif args.grand_prix:
-                table = "grand_prix"
-            else:
-                return print("I don't know what to search for...")
+        case "db":
+            db = DB(f1db, table)
+
+            if args.sql:
+                db.execute_sql(args.sql)
+
+            if args.update:
+                db.update()
+
+            if args.search:
+                if args.driver:
+                    table = "driver"
+                elif args.constructor:
+                    table = "constructor"
+                elif args.circuit:
+                    table = "circuit"
+                elif args.grand_prix:
+                    table = "grand_prix"
+                else:
+                    return print("I don't know what table to search for...")
             
-            search(args.part, table, args.column, args.overwrite_pattern)
+                db.search(args.search, table, args.column, args.overwrite_pattern)
+            
         case _:
             print(f"Unknown command: {args.command}")
 
@@ -194,6 +109,7 @@ if __name__ == "__main__":
 
     circuit_p = subps.add_parser("circuit", help="Get different records for a circuit")
     circuit_p.add_argument      ("id",  metavar="ID", type=str,                   help="Circuit id")
+    circuit_p.add_argument      ("-i",  "--info",            action="store_true", help="Show circuit info")
     circuit_p.add_argument      ("-bl", "--best-lap",        action="store_true", help="All time best laps during the race")
     circuit_p.add_argument      ("-bq", "--best-qualifying", action="store_true", help="All time best qualifying records")
     circuit_p.add_argument      ("-mw", "--most-wins",       action="store_true", help="List of drivers with most wins")
@@ -221,18 +137,17 @@ if __name__ == "__main__":
     champ_p.add_argument      ("year", metavar="YEAR", type=str, help="Season year")
     champ_p.add_argument      ("-c", "--constructor", action="store_true", help="Show constructor standing instead of driver")
 
-    search_p = subps.add_parser("search", help="Search for different rows in tables by name")
-    search_p.add_argument      ("part", metavar="PART",       type=str,            help="Part to search for")
-    search_p.add_argument      ("-d",  "--driver",            action="store_true", help="Search for driver")
-    search_p.add_argument      ("-c",  "--constructor",       action="store_true", help="Search for a constructor (team)")
-    search_p.add_argument      ("-C",  "--circuit",           action="store_true", help="Search for circuit")
-    search_p.add_argument      ("-gp", "--grand-prix",        action="store_true", help="Search for grand prix")
-    search_p.add_argument      ("-op", "--overwrite-pattern", action="store_true", help="Treat part as entire pattern for sql LIKE when searching")
-    search_p.add_argument      ("-col","--column", type=str,  default="name",      help="Colum to match part, defaults to \"name\"")
 
-    db_p = subps.add_parser("db", help="Different database related commands")
-    db_p.add_argument      ("-s", "--sql", type=str, help="Run arbitrary sql on the f1db")
-    db_p.add_argument      ("-u", "--update", action="store_true", help="Update/init f1db")
+    db_p = subps.add_parser("db",  help="Different database related commands")
+    db_p.add_argument      ("-S",  "--search", type=str,  help="Search by given part")
+    db_p.add_argument      ("-d",  "--driver",            action="store_true", help="If searching, search for driver")
+    db_p.add_argument      ("-c",  "--constructor",       action="store_true", help="If searching, search for a constructor (team)")
+    db_p.add_argument      ("-C",  "--circuit",           action="store_true", help="If searching, search for circuit")
+    db_p.add_argument      ("-gp", "--grand-prix",        action="store_true", help="If searching, search for grand prix")
+    db_p.add_argument      ("-op", "--overwrite-pattern", action="store_true", help="If searching, treat part as entire pattern for sql LIKE when searching")
+    db_p.add_argument      ("-col","--column",  type=str, default="name",      help="If searching, use given colum to match part, defaults to \"name\"")
+    db_p.add_argument      ("-s",  "--sql",     type=str,                      help="Run arbitrary sql on the f1db")
+    db_p.add_argument      ("-u",  "--update",  action="store_true",           help="Update/init f1db")
 
     args = p.parse_args()
 
