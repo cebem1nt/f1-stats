@@ -43,7 +43,7 @@ def main(args: argparse.Namespace):
                 circuit.record("most-podiums")
         
         case "season":
-            season = Season(args.year, args.gp_flags, f1db, table)
+            season = Season(args.year, args.flags, f1db, table)
             season.championship(args.constructor)
 
         case "driver":
@@ -53,7 +53,7 @@ def main(args: argparse.Namespace):
                 driver.races()
             
             if args.pit_stops:
-                driver.pits(s)
+                driver.pits()
 
             if args.overview:
                 driver.overview()
@@ -116,7 +116,6 @@ if __name__ == "__main__":
     p.add_argument("--double-headers", action="store_true", help="Print table headers twice (at the top and bottom)")
     p.add_argument("--no-delimiters", action="store_true", help="Do not print any separators for tables")
     p.add_argument("--adjustment", default="left", choices=("left", "center", "right"), help="Table text alignment")
-    p.add_argument("--gp-flags", action="store_true", help="Add emoji flags to grand prix")
 
     circuit_p = subps.add_parser("circuit", help="Get different records for a circuit")
     circuit_p.add_argument      ("id",  metavar="ID", type=str,                   help="Circuit id")
@@ -148,6 +147,7 @@ if __name__ == "__main__":
     champ_p = subps.add_parser("season", help="Fancy wikipedia like season table for driver/constructor championship")
     champ_p.add_argument      ("year", metavar="YEAR", type=str, help="Season year")
     champ_p.add_argument      ("-c", "--constructor", action="store_true", help="Show constructor standing instead of driver")
+    champ_p.add_argument      ("--flags", action="store_true", help="Add emoji flags to grand prix columns")
 
 
     db_p = subps.add_parser("db",  help="Different database related commands")
@@ -158,7 +158,7 @@ if __name__ == "__main__":
     db_p.add_argument      ("-t",  "--constructor",  type=str,              help="If searching, search for a constructor (team)")
     db_p.add_argument      ("-c",  "--circuit",      type=str,              help="If searching, search for circuit")
     db_p.add_argument      ("-g",  "--grand-prix",   type=str,              help="If searching, search for grand prix")
-    db_p.add_argument      ("--pattern",             type=str,              help="If searching, treat part as entire pattern for sql LIKE when searching")
+    db_p.add_argument      ("--pattern",             action="store_true",   help="If searching, treat part as entire pattern for sql LIKE when searching")
     db_p.add_argument      ("--column",  type=str,   default="name",        help="If searching, use given colum to match part, defaults to \"name\"")
 
     args = p.parse_args()

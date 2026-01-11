@@ -148,7 +148,7 @@ class GP(Base):
     
         self.table.flush()
         print_comments(comments)
-        
+
         if dnfs_comments:
             print(separator())
             print_comments(dnfs_comments)
@@ -256,7 +256,7 @@ class Driver(Base):
             if  total_pits > most_pits:
                 most_pits = total_pits
 
-        self.table.headers = [f"pit {i+1}" for i in range(most_pits)]
+        self.table.headers = ['Grand prix'] + [f"pit {i+1}" for i in range(most_pits)] + ['']
 
         for race, pits in races_pits.items():
             row = [race]
@@ -273,7 +273,7 @@ class Driver(Base):
 
             row.append(total_pits)
             self.table.add_row(row)
-        
+
         self.table.flush()
 
     def qualifying(self):
@@ -288,7 +288,7 @@ class Driver(Base):
         )
     
         if not rows:
-            return print("Couldn't find anything")
+            return print(f"No data found for {self.id} - {self.year}")
 
         per_race_pts_made = []
         per_race_team_pts_made = []
