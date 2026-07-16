@@ -135,7 +135,7 @@ def main():
     driver_p.add_argument      ("-p",  "--pit-stops",       action="store_true", help="Table of pit stops for each race")
     driver_p.add_argument      ("-a",  "--all-time",        action="store_true", help="Show all time results instead")
     
-    race_p = subps.add_parser("race", help="Show exact race result for given year")
+    race_p = subps.add_parser("race", help="Show race results for given year and race id. Use \"last\" to show the result of the last race")
     race_p.add_argument      ("id",   metavar="ID",      type=str,            help="Grand prix or circuit id, e.g: monaco/china, shanghai")
     race_p.add_argument      ("year", metavar="YEAR",    type=int, nargs="?", default=CURRENT_YEAR, help="Year of the race. Current year if omitted")
     race_p.add_argument      ("-f", "--full",            action="store_true", help="Show full information table")

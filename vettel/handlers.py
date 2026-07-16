@@ -72,6 +72,9 @@ class Race:
         if not self.is_full:
             self.table.hide_delimiters = True
 
+        if id.lower() == "last":
+            self.id = fetchers.get_last_race_circuit_id() 
+
     def race(self):
         headers, rows = fetchers.race(self.id, self.year)
 

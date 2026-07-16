@@ -116,3 +116,21 @@ def standings(year: int, is_constructor: bool, as_dict: bool = False):
              "standings/standings"
 
     return __run_script(script, {"year": year}, as_dict)
+
+def get_last_race_circuit_id():
+    out = raw_sql("""
+    SELECT
+        race.circuit_id
+    FROM 
+        race
+    JOIN (
+        SELECT 
+            race_id
+        FROM 
+            race_result
+        ORDER BY race_id DESC
+        LIMIT 1
+    ) race_result ON race_result.race_id = race.id;
+    """, as_dict=True)[0]
+
+    return out["circuit_id"]
