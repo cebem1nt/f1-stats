@@ -291,6 +291,13 @@ vet db --search -d max
 vet db --sql my_hacky.sql
 ```
 
+> [!NOTE]
+> To get new info, update database once in a while with:
+> 
+> ```sh
+> vet db --update
+> ```
+
 ## Installation
 
 ### AUR:
@@ -315,12 +322,6 @@ pip install .
 
 ```sh
 sudo python setup.py install
-```
-
-To get new info, update database once in a while with:
-
-```sh
-vet db --update
 ```
 
 ## Misc
